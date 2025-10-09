@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "243219494581",
+    "firebase_url": "https://rffrrfrere-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "rffrrfrere",
+    "storage_bucket": "rffrrfrere.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:243219494581:android:4a9e95af16cd346def70fc",
+        "android_client_info": {
+          "package_name": "com.example.untitled14"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDFnpjOgjFO0VFbE1HvmpuJKBdgp-Qa744"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
