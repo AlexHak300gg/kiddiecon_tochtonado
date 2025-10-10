@@ -51,9 +51,10 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
             const SnackBar(content: Text('Срок действия кода истёк')),
           );
         } else {
-          setState(() {
-            _foundParent = data;
-          });
+          setState(() => _foundParent = data);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Родитель найден: ${data['parentName']}')),
+          );
         }
       }
     } catch (e) {
@@ -84,12 +85,14 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
       final parentName = _foundParent!['parentName'] ?? "Без имени";
       final parentCode = _codeController.text.trim();
 
+      // создаём безопасный ключ для Firebase
       String sanitizeKey(String key) {
         return key.replaceAll(RegExp(r'[.#$\[\]]'), '_');
       }
 
       final safeParentKey = sanitizeKey(parentName);
 
+      // создаём новую запись ребёнка
       final newChildRef = _db.child('children').push();
       await newChildRef.set({
         'name': _nameController.text.trim(),
@@ -97,9 +100,12 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'parentCode': parentCode,
         'goal': 'Пока не установлена',
         'balance': 0,
+        'progress': 0,
+        'target': 0,
         'createdAt': DateTime.now().toIso8601String(),
       });
 
+      // создаём ссылку у родителя
       await _db
           .child('parents_children')
           .child(safeParentKey)
@@ -110,19 +116,24 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'goal': 'Пока не установлена',
         'balance': 0,
         'progress': 0,
+        'target': 0,
       });
 
+      // удаляем использованный код
       await _db.child('invites/$parentCode').remove();
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ребёнок успешно подключён! 🎉')),
+      );
+
+      // ✅ Переход в домашний экран ребёнка
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => ChildHomeScreen(
+            childId: newChildRef.key!,
+            parentKey: safeParentKey,
             childName: _nameController.text.trim(),
-            balance: 2450,
-            goalName: 'Велосипед',
-            goalTarget: 15000,
-            goalProgress: 6750,
           ),
         ),
       );
@@ -145,7 +156,7 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // 🔙 Кнопка "Назад" (в левом верхнем углу)
+            // 🔙 Кнопка "Назад"
             Positioned(
               top: 10,
               left: 10,
@@ -168,13 +179,12 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.arrow_back,
-                      color: Colors.white, size: 22),
+                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
                 ),
               ),
             ),
 
-            // 🧩 Основное содержимое
+            // 🧩 Основной экран
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -182,6 +192,7 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 40),
+
                     // 🟠 Иконка
                     Container(
                       height: 80,
@@ -209,16 +220,14 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // Поле ввода кода
+                    // Поле кода
                     TextField(
                       controller: _codeController,
                       textAlign: TextAlign.center,
                       decoration: InputDecoration(
-                        prefixIcon:
-                        const Icon(Icons.person_outline, color: Colors.grey),
+                        prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
                         hintText: "Введите код приглашения от родителя",
-                        hintStyle:
-                        GoogleFonts.nunito(color: Colors.black54, fontSize: 14),
+                        hintStyle: GoogleFonts.nunito(color: Colors.black54, fontSize: 14),
                         filled: true,
                         fillColor: const Color(0xFFF6F8FB),
                         border: OutlineInputBorder(
@@ -264,7 +273,6 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 30),
 
                     if (_foundParent != null) ...[

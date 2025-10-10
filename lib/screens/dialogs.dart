@@ -1,74 +1,213 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// Диалог создания цели. Возвращает Map {'name': String, 'target': int}
-class CreateGoalDialog extends StatelessWidget {
-  const CreateGoalDialog({super.key});
+/// 🎯 Диалог создания новой цели
+class CreateGoalDialog extends StatefulWidget {
+  final void Function(String goalName, int target)? onCreated;
+
+  const CreateGoalDialog({super.key, this.onCreated});
+
+  @override
+  State<CreateGoalDialog> createState() => _CreateGoalDialogState();
+}
+
+class _CreateGoalDialogState extends State<CreateGoalDialog> {
+  final _goalController = TextEditingController();
+  final _targetController = TextEditingController();
+  bool _isSaving = false;
+
+  Future<void> _saveGoal() async {
+    final goalName = _goalController.text.trim();
+    final targetText = _targetController.text.trim();
+
+    if (goalName.isEmpty || targetText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Заполни все поля')),
+      );
+      return;
+    }
+
+    final target = int.tryParse(targetText);
+    if (target == null || target <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите корректную сумму цели')),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    // 🔥 передаём данные родителю
+    if (widget.onCreated != null) {
+      widget.onCreated!(goalName, target);
+    }
+
+    Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final targetCtrl = TextEditingController();
-
-    return AlertDialog(
-      title: const Text('Новая цель'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: nameCtrl,
-            decoration: const InputDecoration(labelText: 'Название цели'),
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Новая цель 🎯",
+                style: GoogleFonts.nunito(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _goalController,
+                decoration: InputDecoration(
+                  labelText: "Название цели",
+                  hintText: "Например: Велосипед",
+                  filled: true,
+                  fillColor: const Color(0xFFF6F8FB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _targetController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: "Сумма цели (₽)",
+                  hintText: "Введите сумму",
+                  filled: true,
+                  fillColor: const Color(0xFFF6F8FB),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: _isSaving ? null : _saveGoal,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF6B00), Color(0xFFFF9A44)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: _isSaving
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                      "Сохранить",
+                      style: GoogleFonts.nunito(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: targetCtrl,
-            decoration: const InputDecoration(labelText: 'Сумма (₽)'),
-            keyboardType: TextInputType.number,
-          ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-        TextButton(
-          onPressed: () {
-            final name = nameCtrl.text.trim();
-            final target = int.tryParse(targetCtrl.text.trim()) ?? 0;
-            if (name.isEmpty || target <= 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Введите корректные данные')),
-              );
-              return;
-            }
-            Navigator.pop(context, {'name': name, 'target': target});
-          },
-          child: const Text('Создать'),
-        ),
-      ],
     );
   }
 }
 
-/// Диалог пополнения. Возвращает строку с суммой (например "100")
-class DepositDialog extends StatelessWidget {
+/// 💰 Диалог внесения средств в цель
+class DepositDialog extends StatefulWidget {
   final int maxAmount;
-  const DepositDialog({required this.maxAmount, super.key});
+
+  const DepositDialog({super.key, required this.maxAmount});
+
+  @override
+  State<DepositDialog> createState() => _DepositDialogState();
+}
+
+class _DepositDialogState extends State<DepositDialog> {
+  final _controller = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
-    final ctrl = TextEditingController();
-    return AlertDialog(
-      title: const Text('Пополнить цель'),
-      content: TextField(
-        controller: ctrl,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(labelText: 'Сумма (макс. $maxAmount ₽)'),
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "Внести в цель 💰",
+              style: GoogleFonts.nunito(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Доступно: ${widget.maxAmount}₽",
+              style: GoogleFonts.nunito(color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: "Сколько внести?",
+                filled: true,
+                fillColor: const Color(0xFFF6F8FB),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context, _controller.text.trim());
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF6B00), Color(0xFFFF9A44)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: Text(
+                    "Подтвердить",
+                    style: GoogleFonts.nunito(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-        TextButton(onPressed: () => Navigator.pop(context, ctrl.text), child: const Text('OK')),
-      ],
     );
   }
 }

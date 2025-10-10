@@ -1,4 +1,3 @@
-// lib/screens/child_registration_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -123,7 +122,8 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
           .set({
         'childId': newChildRef.key,
         'childName': _nameController.text.trim(),
-        'goal': 'Пока не установлена',
+        'goal': 'Цель не установлена',
+        'target': 0,
         'balance': 0,
         'progress': 0,
       });
@@ -134,16 +134,14 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
         const SnackBar(content: Text('Аккаунт ребёнка успешно создан! 🎉')),
       );
 
-      // ✅ После регистрации — переход в ChildHomeScreen
+      // ✅ Переход в ChildHomeScreen (баланс всегда 0)
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => ChildHomeScreen(
+            childId: newChildRef.key!,
+            parentKey: parentKey,
             childName: _nameController.text.trim(),
-            balance: 0,
-            goalName: 'Пока не установлена',
-            goalTarget: 0,
-            goalProgress: 0,
           ),
         ),
       );
@@ -187,7 +185,6 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
     );
   }
 
-  /// 🌈 Универсальная кнопка с градиентом
   Widget _gradientButton({
     required String text,
     required VoidCallback onPressed,
