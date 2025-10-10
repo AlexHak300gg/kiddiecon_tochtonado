@@ -36,7 +36,6 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 👋 Приветствие
               Row(
                 children: [
                   const CircleAvatar(
