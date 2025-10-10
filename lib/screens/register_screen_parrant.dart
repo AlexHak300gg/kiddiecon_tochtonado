@@ -16,6 +16,14 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
   bool _isLoading = false;
   final _db = FirebaseDatabase.instance.ref();
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _registerParent() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -31,13 +39,20 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
     setState(() => _isLoading = true);
 
     try {
+      // Создаём запись в /parents с начальными полями и balance = 0
+      final newParentRef = _db.child('parents').push();
       final newParent = {
         'name': name,
         'email': email,
         'password': password,
+        'balance': 0, // <- добавлено поле баланса
+        'createdAt': DateTime.now().toIso8601String(),
       };
-      await _db.child('parents').push().set(newParent);
 
+      await newParentRef.set(newParent);
+
+      // Перейти на дашборд (передаём имя родителя как сейчас ожидает ваш экран)
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -49,7 +64,7 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
         SnackBar(content: Text('Ошибка регистрации: $e')),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -75,8 +90,7 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
                 prefixIcon: const Icon(Icons.person_outline),
                 filled: true,
                 fillColor: Colors.white,
-                border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 16),
@@ -87,8 +101,7 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
                 prefixIcon: const Icon(Icons.email_outlined),
                 filled: true,
                 fillColor: Colors.white,
-                border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 16),
@@ -100,8 +113,7 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
                 prefixIcon: const Icon(Icons.lock_outline),
                 filled: true,
                 fillColor: Colors.white,
-                border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 30),
@@ -112,8 +124,7 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
                 onPressed: _isLoading ? null : _registerParent,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)

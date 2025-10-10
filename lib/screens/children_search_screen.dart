@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'child_home_screen.dart';
 
 class ChildrenSearchScreen extends StatefulWidget {
   const ChildrenSearchScreen({super.key});
@@ -107,20 +108,22 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'progress': 0,
       });
 
-      // 🧹 Удаляем код приглашения, чтобы им нельзя было воспользоваться повторно
+      // 🧹 Удаляем код приглашения
       await _db.child('invites/$parentCode').remove();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ребёнок успешно привязан к родителю "$parentName"!'),
+      // ✅ Переход на домашний экран ребёнка
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChildHomeScreen(
+            childName: _nameController.text.trim(),
+            balance: 2450,
+            goalName: 'Велосипед',
+            goalTarget: 15000,
+            goalProgress: 6750,
+          ),
         ),
       );
-
-      setState(() {
-        _foundParent = null;
-        _codeController.clear();
-        _nameController.clear();
-      });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка при добавлении: $e')),

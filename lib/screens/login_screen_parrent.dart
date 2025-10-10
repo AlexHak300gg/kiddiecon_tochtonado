@@ -1,3 +1,4 @@
+// lib/screens/login_screen_parent.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'parent_dashboard_screen.dart';
@@ -15,6 +16,13 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
   final _db = FirebaseDatabase.instance.ref();
   bool _isLoading = false;
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loginParent() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -30,6 +38,7 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
 
     try {
       final snapshot = await _db.child('parents').get();
+
       if (!snapshot.exists || snapshot.value == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Пользователи не найдены')),
@@ -38,16 +47,29 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
         return;
       }
 
-      final data = Map<String, dynamic>.from(snapshot.value as Map);
-      bool match = false;
-      String parentName = "Родитель";
+      final raw = snapshot.value;
+      if (raw is! Map) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Неверный формат данных')),
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
 
-      for (var entry in data.entries) {
-        final parent = Map<String, dynamic>.from(entry.value);
-        if (parent['email'] == email && parent['password'] == password) {
-          match = true;
-          parentName = parent['name'] ?? 'Родитель';
-          break;
+      bool match = false;
+      String matchedEmail = '';
+
+      for (final entry in raw.entries) {
+        if (entry.value is Map) {
+          final parent = Map<String, dynamic>.from(entry.value as Map);
+          final pEmail = (parent['email'] ?? '').toString();
+          final pPassword = (parent['password'] ?? '').toString();
+
+          if (pEmail == email && pPassword == password) {
+            match = true;
+            matchedEmail = pEmail;
+            break;
+          }
         }
       }
 
@@ -55,7 +77,8 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-              builder: (_) => ParentDashboardScreen(parentName: parentName)),
+            builder: (_) => ParentDashboardScreen(parentName: matchedEmail),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -67,15 +90,8 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
         SnackBar(content: Text('Ошибка входа: $e')),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
   }
 
   @override
@@ -100,8 +116,7 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
                 prefixIcon: const Icon(Icons.email_outlined),
                 filled: true,
                 fillColor: Colors.white,
-                border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 16),
@@ -113,8 +128,7 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
                 prefixIcon: const Icon(Icons.lock_outline),
                 filled: true,
                 fillColor: Colors.white,
-                border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 30),
@@ -125,8 +139,7 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
                 onPressed: _isLoading ? null : _loginParent,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
