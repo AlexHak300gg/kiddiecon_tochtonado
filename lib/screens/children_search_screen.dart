@@ -84,14 +84,12 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
       final parentName = _foundParent!['parentName'] ?? "Без имени";
       final parentCode = _codeController.text.trim();
 
-      /// ✅ Функция, очищающая строку от запрещённых символов Firebase
       String sanitizeKey(String key) {
-        return key.replaceAll(RegExp(r'[.#$\\[\\]]'), '_');
+        return key.replaceAll(RegExp(r'[.#$\[\]]'), '_');
       }
 
       final safeParentKey = sanitizeKey(parentName);
 
-      // 🟣 1. Создаём запись ребёнка
       final newChildRef = _db.child('children').push();
       await newChildRef.set({
         'name': _nameController.text.trim(),
@@ -102,7 +100,6 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'createdAt': DateTime.now().toIso8601String(),
       });
 
-      // 🟢 2. Привязываем ребёнка к родителю (безопасный ключ!)
       await _db
           .child('parents_children')
           .child(safeParentKey)
@@ -115,10 +112,8 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'progress': 0,
       });
 
-      // 🧹 3. Удаляем код приглашения
       await _db.child('invites/$parentCode').remove();
 
-      // ✅ Переход на домашний экран ребёнка
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -146,111 +141,179 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE3F2FD),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          'Вход для ребёнка',
-          style: GoogleFonts.nunito(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            // 🔹 Ввод кода приглашения
-            TextField(
-              controller: _codeController,
-              decoration: InputDecoration(
-                hintText: "Введите код приглашения от родителя",
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 🟠 Иконка в круге
+                Container(
+                  height: 80,
+                  width: 80,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFFFF6B00), Color(0xFFFF9A44)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: const Icon(Icons.person_add_alt_1,
+                      size: 40, color: Colors.white),
                 ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _loading ? null : _searchParent,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                padding:
-                const EdgeInsets.symmetric(vertical: 14, horizontal: 60),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _loading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("Найти родителя"),
-            ),
+                const SizedBox(height: 24),
 
-            const SizedBox(height: 30),
-
-            if (_foundParent != null) ...[
-              Card(
-                color: Colors.white,
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.family_restroom,
-                          color: Colors.blueAccent, size: 50),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Родитель найден!",
-                        style: GoogleFonts.nunito(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        "Имя родителя: ${_foundParent!['parentName']}",
-                        style: GoogleFonts.nunito(
-                          color: Colors.grey[700],
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: _nameController,
-                        decoration: InputDecoration(
-                          hintText: "Введите ваше имя (ребёнка)",
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loading ? null : _connectToParent,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text("Присоединиться"),
-                      ),
-                    ],
+                // 👋 Заголовок
+                Text(
+                  "С Возвращением!",
+                  style: GoogleFonts.nunito(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
                 ),
-              ),
-            ],
-          ],
+                const SizedBox(height: 30),
+
+                // 🔹 Поле ввода кода
+                TextField(
+                  controller: _codeController,
+                  textAlign: TextAlign.center,
+                  decoration: InputDecoration(
+                    prefixIcon:
+                    const Icon(Icons.person_outline, color: Colors.grey),
+                    hintText: "Введите код приглашения от родителя",
+                    hintStyle:
+                    GoogleFonts.nunito(color: Colors.black54, fontSize: 14),
+                    filled: true,
+                    fillColor: const Color(0xFFF6F8FB),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // 🔘 Кнопка “Найти родителя”
+                GestureDetector(
+                  onTap: _loading ? null : _searchParent,
+                  child: Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF6B00), Color(0xFFFF9A44)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: _loading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                        "Найти родителя",
+                        style: GoogleFonts.nunito(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                if (_foundParent != null) ...[
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeInOut,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.15),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.family_restroom,
+                            color: Colors.blueAccent, size: 50),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Родитель найден!",
+                          style: GoogleFonts.nunito(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Имя родителя: ${_foundParent!['parentName']}",
+                          style: GoogleFonts.nunito(
+                            color: Colors.grey[700],
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _nameController,
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            hintText: "Введите ваше имя (ребёнка)",
+                            filled: true,
+                            fillColor: const Color(0xFFF6F8FB),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        GestureDetector(
+                          onTap: _loading ? null : _connectToParent,
+                          child: Container(
+                            width: double.infinity,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text(
+                                "Присоединиться",
+                                style: GoogleFonts.nunito(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

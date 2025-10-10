@@ -10,10 +10,9 @@ class ParentDashboardScreen extends StatelessWidget {
   final String parentName;
   const ParentDashboardScreen({super.key, required this.parentName});
 
-  // header — требуется контекст, т.к. есть навигация на fake scanner
+  // HEADER
   Widget buildHeader(BuildContext context) {
     final parentKey = parentName.replaceAll('.', '_');
-    final dbRef = FirebaseDatabase.instance.ref('parents/$parentKey/balance');
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -56,7 +55,7 @@ class ParentDashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Баланс — стрим на parents/{key}/balance
+          // Баланс — ищем по email и по имени
           StreamBuilder(
             stream: FirebaseDatabase.instance.ref('parents').onValue,
             builder: (context, snapshot) {
@@ -73,8 +72,11 @@ class ParentDashboardScreen extends StatelessWidget {
                 );
                 for (final entry in parents.entries) {
                   final parent = Map<String, dynamic>.from(entry.value);
-                  if ((parent['email'] ?? '').toString().toLowerCase() ==
-                      parentName.toLowerCase()) {
+                  final email = (parent['email'] ?? '').toString().toLowerCase();
+                  final name = (parent['name'] ?? '').toString().toLowerCase();
+
+                  if (email == parentName.toLowerCase() ||
+                      name == parentName.toLowerCase()) {
                     final val = parent['balance'];
                     if (val is num) balance = val.toDouble();
                     else if (val is String) balance = double.tryParse(val) ?? 0.0;
@@ -123,7 +125,7 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // Nav bar — передаём parentName по навигации
+  // NAVIGATION BAR
   Widget buildNavBar(BuildContext context, int selectedIndex) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -187,7 +189,7 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // Children section (reads parents_children/{parentKey})
+  // CHILDREN SECTION
   Widget _buildChildrenSection() {
     final parentKey = parentName.replaceAll('.', '_');
 
@@ -267,63 +269,75 @@ class ParentDashboardScreen extends StatelessWidget {
             ),
           ),
           Text(balance,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.green)),
         ],
       ),
     );
   }
 
-  // Quick actions: includes Перевести (transfer) и Пригласить
+  // QUICK ACTIONS
   Widget _buildQuickActions(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text("Быстрые действия", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text("Быстрые действия",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
         Row(children: [
           _quickAction(Icons.add, "Новая задача", Colors.blue),
-          _quickAction(Icons.compare_arrows, "Перевести", Colors.green, onTap: () => _showTransferDialog(context)),
+          _quickAction(Icons.compare_arrows, "Перевести", Colors.green,
+              onTap: () => _showTransferDialog(context)),
         ]),
         const SizedBox(height: 10),
         Row(children: [
           _quickAction(Icons.check_circle_outline, "Проверить", Colors.purple),
-          _quickAction(Icons.qr_code, "Пригласить", Colors.orange, onTap: () => _showInviteDialog(context)),
+          _quickAction(Icons.qr_code, "Пригласить", Colors.orange,
+              onTap: () => _showInviteDialog(context)),
         ]),
       ]),
     );
   }
 
-  Widget _quickAction(IconData icon, String label, Color color, {VoidCallback? onTap}) {
+  Widget _quickAction(IconData icon, String label, Color color,
+      {VoidCallback? onTap}) {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
         child: Container(
           margin: const EdgeInsets.all(4),
           height: 90,
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(14)),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(icon, color: color, size: 28),
             const SizedBox(height: 8),
-            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+            Text(label,
+                style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14)),
           ]),
         ),
       ),
     );
   }
 
-  // Transfer dialog — безопасное чтение и запись
+  // 🔹 Перевод средств
   void _showTransferDialog(BuildContext context) async {
     final db = FirebaseDatabase.instance.ref();
     final parentKey = parentName.replaceAll('.', '_');
     final snap = await db.child('parents_children/$parentKey').get();
     if (!snap.exists || snap.value == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Нет детей для перевода")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Нет детей для перевода")));
       return;
     }
 
-    // безопасно привести snapshot.value к Map<String, Map>
     final raw = snap.value as Map<Object?, Object?>;
-    final children = raw.map((k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
+    final children =
+    raw.map((k, v) => MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)));
 
     String? selectedChildId;
     double amount = 0.0;
@@ -333,64 +347,66 @@ class ParentDashboardScreen extends StatelessWidget {
       builder: (context) {
         return StatefulBuilder(builder: (context, setState) {
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Text("Перевод средств ребёнку"),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: "Выберите ребёнка"),
-                items: children.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value['childName'] ?? 'Без имени'))).toList(),
+                items: children.entries
+                    .map((e) => DropdownMenuItem(
+                    value: e.key,
+                    child: Text(e.value['childName'] ?? 'Без имени')))
+                    .toList(),
                 onChanged: (v) => setState(() => selectedChildId = v),
               ),
               TextField(
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: "Сумма перевода (₽)"),
+                decoration:
+                const InputDecoration(labelText: "Сумма перевода (₽)"),
                 onChanged: (v) => amount = double.tryParse(v) ?? 0.0,
               ),
             ]),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text("Отмена")),
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Отмена")),
               ElevatedButton(
                 onPressed: () async {
                   if (selectedChildId == null || amount <= 0) return;
 
-                  final parentRef = db.child('parents/${parentKey}/balance');
+                  final parentRef = db.child('parents/$parentKey/balance');
                   final parentSnap = await parentRef.get();
                   double parentBalance = 0.0;
                   if (parentSnap.exists && parentSnap.value != null) {
                     final val = parentSnap.value;
                     if (val is num) parentBalance = val.toDouble();
-                    else if (val is String) parentBalance = double.tryParse(val) ?? 0.0;
+                    else if (val is String)
+                      parentBalance = double.tryParse(val) ?? 0.0;
                   }
 
                   if (parentBalance < amount) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Недостаточно средств")));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Недостаточно средств")));
                     return;
                   }
 
-                  // update parent balance and child's balance (atomicity not guaranteed by this code; for real app use transactions)
                   await parentRef.set(parentBalance - amount);
 
-                  final childBalanceRef = db.child('parents_children/$parentKey/$selectedChildId/balance');
+                  final childBalanceRef = db
+                      .child('parents_children/$parentKey/$selectedChildId/balance');
                   final childSnap = await childBalanceRef.get();
                   double childBalance = 0.0;
                   if (childSnap.exists && childSnap.value != null) {
                     final val = childSnap.value;
                     if (val is num) childBalance = val.toDouble();
-                    else if (val is String) childBalance = double.tryParse(val) ?? 0.0;
+                    else if (val is String)
+                      childBalance = double.tryParse(val) ?? 0.0;
                   }
                   await childBalanceRef.set(childBalance + amount);
 
-                  // логирование операции в /transactions/{parentKey}/push()
-                  final txRef = db.child('transactions/$parentKey').push();
-                  await txRef.set({
-                    'type': 'transfer',
-                    'amount': amount,
-                    'toChildId': selectedChildId,
-                    'toChildName': children[selectedChildId]?['childName'] ?? '',
-                    'timestamp': DateTime.now().toIso8601String(),
-                  });
-
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Перевод выполнен")));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Перевод выполнен")));
                   Navigator.pop(context);
                 },
                 child: const Text("Перевести"),
@@ -402,10 +418,11 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // Invite dialog
+  // 🔹 Пригласить ребёнка
   void _showInviteDialog(BuildContext context) async {
     final db = FirebaseDatabase.instance.ref();
-    final code = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
+    final code =
+    (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
     final parentKey = parentName.replaceAll('.', '_');
 
     final codeRef = db.child('invites/$code');
@@ -413,7 +430,9 @@ class ParentDashboardScreen extends StatelessWidget {
       'parentKey': parentKey,
       'parentName': parentName,
       'createdAt': DateTime.now().toIso8601String(),
-      'expiresAt': DateTime.now().add(const Duration(minutes: 2)).toIso8601String(),
+      'expiresAt': DateTime.now()
+          .add(const Duration(minutes: 2))
+          .toIso8601String(),
     });
     Future.delayed(const Duration(minutes: 2), () => codeRef.remove());
 
@@ -428,10 +447,18 @@ class ParentDashboardScreen extends StatelessWidget {
             const SizedBox(height: 10),
             const Text("Код для ребёнка (действует 2 мин):"),
             const SizedBox(height: 10),
-            Text(code, style: const TextStyle(fontSize: 24, color: Color(0xFF6F6BF8), fontWeight: FontWeight.bold)),
+            Text(code,
+                style: const TextStyle(
+                    fontSize: 24,
+                    color: Color(0xFF6F6BF8),
+                    fontWeight: FontWeight.bold)),
           ],
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Закрыть"))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Закрыть"))
+        ],
       ),
     );
   }
