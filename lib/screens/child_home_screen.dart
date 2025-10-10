@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'child_stats_screen.dart'; // ✅ Подключаем новый экран статистики
 
 class ChildHomeScreen extends StatefulWidget {
   final String childName;
@@ -26,7 +27,8 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    double percent = widget.goalTarget > 0 ? widget.goalProgress / widget.goalTarget : 0;
+    double percent =
+    widget.goalTarget > 0 ? widget.goalProgress / widget.goalTarget : 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFE3F2FD),
@@ -36,6 +38,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 👋 Приветствие
               Row(
                 children: [
                   const CircleAvatar(
@@ -60,7 +63,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 💳 Карточка школьная
+              // 💳 Карта ребёнка
               Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFF42A5F5),
@@ -76,7 +79,8 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
                         color: Colors.orangeAccent,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.school, color: Colors.white, size: 36),
+                      child: const Icon(Icons.school,
+                          color: Colors.white, size: 36),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -104,7 +108,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
 
               const SizedBox(height: 24),
 
-              // 🎯 Цель
+              // 🎯 Цели
               Text(
                 "Мои цели",
                 style: GoogleFonts.nunito(
@@ -192,7 +196,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
         ),
       ),
 
-      // ⚪️ Кастомное нижнее меню
+      // ⚪️ Нижняя панель навигации
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.only(bottom: 20, left: 40, right: 40),
         child: Container(
@@ -213,9 +217,8 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
             children: [
               _buildNavItem(Icons.home, 0),
               _buildNavItem(Icons.task_alt, 1),
-              _buildNavItem(Icons.center_focus_strong, 2), // 🎯 похожая на bullseye
-              _buildNavItem(Icons.show_chart, 3),
-
+              _buildNavItem(Icons.center_focus_strong, 2),
+              _buildNavItem(Icons.show_chart, 3), // 📊 Статистика
             ],
           ),
         ),
@@ -223,10 +226,26 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
     );
   }
 
+  // 🔘 Элемент навигации
   Widget _buildNavItem(IconData icon, int index) {
     final bool isSelected = _currentIndex == index;
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () {
+        setState(() => _currentIndex = index);
+
+        // 👉 Переход на экран статистики
+        if (index == 3) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChildStatsScreen(
+                childName: widget.childName,
+                balance: widget.balance,
+              ),
+            ),
+          );
+        }
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: 50,
@@ -244,6 +263,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
     );
   }
 
+  // 🧩 Карточка задания
   Widget _taskCard(String title, int reward, bool done) {
     return Container(
       width: 150,
