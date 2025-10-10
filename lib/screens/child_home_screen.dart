@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class ChildHomeScreen extends StatelessWidget {
+class ChildHomeScreen extends StatefulWidget {
   final String childName;
   final int balance;
   final String goalName;
@@ -18,8 +18,15 @@ class ChildHomeScreen extends StatelessWidget {
   });
 
   @override
+  State<ChildHomeScreen> createState() => _ChildHomeScreenState();
+}
+
+class _ChildHomeScreenState extends State<ChildHomeScreen> {
+  int _currentIndex = 0;
+
+  @override
   Widget build(BuildContext context) {
-    double percent = goalTarget > 0 ? goalProgress / goalTarget : 0;
+    double percent = widget.goalTarget > 0 ? widget.goalProgress / widget.goalTarget : 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFE3F2FD),
@@ -39,7 +46,7 @@ class ChildHomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    "Привет, $childName 👋",
+                    "Привет, ${widget.childName} 👋",
                     style: GoogleFonts.nunito(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -80,14 +87,14 @@ class ChildHomeScreen extends StatelessWidget {
                           Text("Моя школьная карта",
                               style: GoogleFonts.nunito(color: Colors.white70)),
                           Text(
-                            childName,
+                            widget.childName,
                             style: GoogleFonts.nunito(
                               fontSize: 18,
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          Text("Баланс: $balance ₽",
+                          Text("Баланс: ${widget.balance} ₽",
                               style: GoogleFonts.nunito(color: Colors.white)),
                         ],
                       ),
@@ -119,13 +126,13 @@ class ChildHomeScreen extends StatelessWidget {
                       children: [
                         const Icon(Icons.pedal_bike, color: Colors.orange),
                         const SizedBox(width: 8),
-                        Text(goalName,
+                        Text(widget.goalName,
                             style: GoogleFonts.nunito(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             )),
                         const Spacer(),
-                        Text("Цель: $goalTarget ₽",
+                        Text("Цель: ${widget.goalTarget} ₽",
                             style: GoogleFonts.nunito(color: Colors.grey)),
                       ],
                     ),
@@ -152,11 +159,11 @@ class ChildHomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      "Накоплено: $goalProgress ₽",
+                      "Накоплено: ${widget.goalProgress} ₽",
                       style: GoogleFonts.nunito(),
                     ),
                     Text(
-                      "Осталось: ${goalTarget - goalProgress} ₽",
+                      "Осталось: ${widget.goalTarget - widget.goalProgress} ₽",
                       style: GoogleFonts.nunito(color: Colors.grey),
                     ),
                   ],
@@ -186,16 +193,54 @@ class ChildHomeScreen extends StatelessWidget {
         ),
       ),
 
-      // 🔽 Нижнее меню
-      bottomNavigationBar: BottomNavigationBar(
-        selectedItemColor: Colors.blueAccent,
-        unselectedItemColor: Colors.grey,
-        currentIndex: 0,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.task_alt), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.account_circle), label: ''),
-        ],
+      // ⚪️ Кастомное нижнее меню
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.only(bottom: 20, left: 40, right: 40),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(Icons.home, 0),
+              _buildNavItem(Icons.task_alt, 1),
+              _buildNavItem(Icons.center_focus_strong, 2), // 🎯 похожая на bullseye
+              _buildNavItem(Icons.show_chart, 3),
+
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, int index) {
+    final bool isSelected = _currentIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blueAccent : const Color(0xFFEDEDED),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Icon(
+          icon,
+          color: isSelected ? Colors.white : Colors.black54,
+          size: 26,
+        ),
       ),
     );
   }
@@ -223,8 +268,7 @@ class ChildHomeScreen extends StatelessWidget {
               style: GoogleFonts.nunito(color: Colors.orangeAccent)),
           const SizedBox(height: 6),
           Container(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: done ? Colors.green[100] : Colors.yellow[100],
               borderRadius: BorderRadius.circular(8),
