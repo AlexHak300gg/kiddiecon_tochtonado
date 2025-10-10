@@ -2,23 +2,21 @@ import 'package:flutter/material.dart';
 import 'parent_dashboard_screen.dart';
 
 class ParentStatsScreen extends StatelessWidget {
-  const ParentStatsScreen({super.key});
+  final String parentName;
+  const ParentStatsScreen({super.key, required this.parentName});
 
   @override
   Widget build(BuildContext context) {
-    // создаём экземпляр без const — чтобы можно было вызывать методы .buildHeader()/.buildNavBar()
-    final dashboard = ParentDashboardScreen(parentName: "Анна");
+    final dashboard = ParentDashboardScreen(parentName: parentName);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FC),
       body: SafeArea(
         child: Column(
           children: [
-            // Общая шапка и навигация
-            dashboard.buildHeader(),
+            dashboard.buildHeader(context),
             dashboard.buildNavBar(context, 2),
 
-            // Контент страницы статистики
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -46,14 +44,13 @@ class ParentStatsScreen extends StatelessWidget {
     );
   }
 
-  // Виджет прогресса: "Имя — цель: Название" (через тире)
   Widget _goalProgress(String name, String goal, int percent, Color color) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.grey.shade200, blurRadius: 4, offset: const Offset(0,2))],
+        boxShadow: [BoxShadow(color: Colors.grey.shade200, blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

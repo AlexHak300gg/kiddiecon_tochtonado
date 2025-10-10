@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'parent_tasks_screen.dart';
 import 'parent_stats_screen.dart';
+import 'fake_qr_scanner_screen.dart';
 
 class ParentDashboardScreen extends StatelessWidget {
   final String parentName;
   const ParentDashboardScreen({super.key, required this.parentName});
 
   // 🌟 Шапка родителя с Firebase-балансом
-  Widget buildHeader() {
+  Widget buildHeader(BuildContext context) {
     final dbRef = FirebaseDatabase.instance.ref('parents/$parentName/balance');
 
     return Container(
@@ -97,7 +98,23 @@ class ParentDashboardScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Icon(Icons.sync, color: Colors.white),
+
+                    // 🔹 Иконка СБП
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const FakeQrScannerScreen(),
+                          ),
+                        );
+                      },
+                      child: Image.asset(
+                        'assets/sbp.png',
+                        height: 36,
+                        width: 36,
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -124,25 +141,25 @@ class ParentDashboardScreen extends StatelessWidget {
   }
 
   Widget _navItem(
-      BuildContext context,
-      IconData icon,
-      String label,
-      int index,
-      int selected,
-      ) {
+      BuildContext context, IconData icon, String label, int index, int selected) {
     final bool isActive = index == selected;
     return GestureDetector(
       onTap: () {
         if (index == selected) return;
-        if (index == 1) {
+        else if (index == 1) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const ParentTasksScreen()),
+            MaterialPageRoute(
+              builder: (_) => ParentTasksScreen(parentName: parentName),
+            ),
           );
-        } else if (index == 2) {
+        }
+        else if (index == 2) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const ParentStatsScreen()),
+            MaterialPageRoute(
+              builder: (_) => ParentStatsScreen(parentName: parentName),
+            ),
           );
         } else {
           Navigator.pushReplacement(
@@ -206,14 +223,16 @@ class ParentDashboardScreen extends StatelessWidget {
 
               final data = Map<String, dynamic>.from(snapshot.data!.value as Map);
 
-              final children = data.values.map((childData) {
-                final child = Map<String, dynamic>.from(childData);
+              final children = data.entries.map((entry) {
+                final child = Map<String, dynamic>.from(entry.value);
+                final childId = entry.key;
                 final name = child['childName'] ?? 'Без имени';
-                final goal = 'Цель: велосипед'; // временная цель
+                final goal = child['goal'] ?? 'Цель не установлена';
                 final balance = '₽${child['balance'] ?? '0'}';
-                final progress = (child['progress'] ?? 35);
+                final progress = (child['progress'] ?? 0);
 
-                return _childCard(name, goal, balance, progress, Colors.blueAccent);
+                return _childCard(
+                    childId, name, goal, balance, progress, Colors.blueAccent);
               }).toList();
 
               return SizedBox(
@@ -227,13 +246,8 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _childCard(
-      String name,
-      String goal,
-      String balance,
-      int progress,
-      Color color,
-      ) {
+  Widget _childCard(String childId, String name, String goal, String balance,
+      int progress, Color color) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -287,7 +301,7 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // 🌟 Быстрые действия + приглашение
+  // 🌟 Быстрые действия
   Widget _buildQuickActions(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -303,7 +317,8 @@ class ParentDashboardScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _quickAction(Icons.add, "Новая задача", Colors.blue),
-              _quickAction(Icons.attach_money, "Пополнить", Colors.green),
+              _quickAction(Icons.compare_arrows, "Перевести", Colors.green,
+                  onTap: () => _showTransferDialog(context)),
             ],
           ),
           const SizedBox(height: 10),
@@ -347,13 +362,112 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // 🟣 Приглашение ребёнка
+  // 💸 Исправленный диалог перевода
+  void _showTransferDialog(BuildContext context) async {
+    final db = FirebaseDatabase.instance.ref();
+    final parentKey = parentName.replaceAll('.', '_');
+    final snapshot = await db.child('parents_children/$parentKey').get();
+
+    if (!snapshot.exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Нет детей для перевода")),
+      );
+      return;
+    }
+
+    // ✅ Безопасное приведение типов
+    final rawData = snapshot.value as Map<Object?, Object?>;
+    final children = rawData.map((key, value) =>
+        MapEntry(key.toString(), Map<String, dynamic>.from(value as Map)));
+
+    String? selectedChildId;
+    double amount = 0.0;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text("Перевод средств ребёнку"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  decoration:
+                  const InputDecoration(labelText: "Выберите ребёнка"),
+                  items: children.entries.map((entry) {
+                    final name = (entry.value)['childName'] ?? "Без имени";
+                    return DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(name),
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => selectedChildId = val),
+                ),
+                TextField(
+                  keyboardType: TextInputType.number,
+                  decoration:
+                  const InputDecoration(labelText: "Сумма перевода (₽)"),
+                  onChanged: (val) {
+                    amount = double.tryParse(val) ?? 0.0;
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Отмена"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (selectedChildId == null || amount <= 0) return;
+
+                  final parentRef = db.child('parents/$parentName/balance');
+                  final childRef = db.child(
+                      'parents_children/$parentKey/$selectedChildId/balance');
+
+                  final parentSnap = await parentRef.get();
+                  double parentBalance =
+                      (parentSnap.value as num?)?.toDouble() ?? 0.0;
+
+                  if (parentBalance < amount) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Недостаточно средств")),
+                    );
+                    return;
+                  }
+
+                  await parentRef.set(parentBalance - amount);
+                  final childSnap = await childRef.get();
+                  double childBalance =
+                      (childSnap.value as num?)?.toDouble() ?? 0.0;
+                  await childRef.set(childBalance + amount);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Перевод выполнен успешно")),
+                  );
+
+                  Navigator.pop(context);
+                },
+                child: const Text("Перевести"),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  // 🟣 Диалог приглашения
   void _showInviteDialog(BuildContext context) async {
-    final databaseRef = FirebaseDatabase.instance.ref();
-    final String inviteCode =
+    final db = FirebaseDatabase.instance.ref();
+    final code =
     (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
 
-    final codeRef = databaseRef.child('invites/$inviteCode');
+    final codeRef = db.child('invites/$code');
     await codeRef.set({
       'parentName': parentName,
       'createdAt': DateTime.now().toIso8601String(),
@@ -361,72 +475,33 @@ class ParentDashboardScreen extends StatelessWidget {
       DateTime.now().add(const Duration(minutes: 2)).toIso8601String(),
     });
 
-    Future.delayed(const Duration(minutes: 2), () {
-      codeRef.remove();
-    });
+    Future.delayed(const Duration(minutes: 2), () => codeRef.remove());
 
     showDialog(
       context: context,
-      builder: (context) {
-        return Dialog(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.qr_code_2, size: 60, color: Color(0xFF6F6BF8)),
-                const SizedBox(height: 16),
-                const Text(
-                  "Пригласить ребёнка",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "Передайте ребёнку этот код. Он действует 2 минуты:",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[700]),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 12, horizontal: 24),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6F6BF8),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    inviteCode,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 3),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6F6BF8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  label: const Text("Закрыть",
-                      style: TextStyle(color: Colors.white)),
-                ),
-              ],
-            ),
+      builder: (context) => AlertDialog(
+        title: const Text("Пригласить ребёнка"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.qr_code, size: 80, color: Color(0xFF6F6BF8)),
+            const SizedBox(height: 10),
+            Text("Код для ребёнка (действует 2 мин):"),
+            const SizedBox(height: 10),
+            Text(code,
+                style: const TextStyle(
+                    fontSize: 24,
+                    color: Color(0xFF6F6BF8),
+                    fontWeight: FontWeight.bold)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Закрыть"),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -438,7 +513,7 @@ class ParentDashboardScreen extends StatelessWidget {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              buildHeader(),
+              buildHeader(context),
               buildNavBar(context, 0),
               _buildChildrenSection(),
               _buildQuickActions(context),

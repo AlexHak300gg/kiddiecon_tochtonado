@@ -50,10 +50,7 @@ class _FakeQrScannerScreenState extends State<FakeQrScannerScreen> {
           ? Stack(
         children: [
           CameraPreview(_controller!),
-          // затемнение вокруг зоны сканирования
-          Container(
-            color: Colors.black.withOpacity(0.4),
-          ),
+          Container(color: Colors.black.withOpacity(0.4)),
           Center(
             child: Container(
               width: 250,
@@ -62,14 +59,7 @@ class _FakeQrScannerScreenState extends State<FakeQrScannerScreen> {
                 border: Border.all(color: Colors.white, width: 2),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Stack(
-                children: [
-                  // 🔹 Анимация "сканирующей линии"
-                  Positioned.fill(
-                    child: AnimatedScannerLine(),
-                  ),
-                ],
-              ),
+              child: const AnimatedScannerLine(),
             ),
           ),
         ],
@@ -79,16 +69,14 @@ class _FakeQrScannerScreenState extends State<FakeQrScannerScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.purpleAccent,
-        onPressed: () {
-          Navigator.pop(context);
-        },
+        onPressed: () => Navigator.pop(context),
         child: const Icon(Icons.close),
       ),
     );
   }
 }
 
-/// 🔹 Анимированная "линия" сканера
+/// 🔹 Анимация "сканирующей линии"
 class AnimatedScannerLine extends StatefulWidget {
   const AnimatedScannerLine({super.key});
 
@@ -103,10 +91,9 @@ class _AnimatedScannerLineState extends State<AnimatedScannerLine>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: false);
+    _controller =
+    AnimationController(vsync: this, duration: const Duration(seconds: 2))
+      ..repeat();
   }
 
   @override

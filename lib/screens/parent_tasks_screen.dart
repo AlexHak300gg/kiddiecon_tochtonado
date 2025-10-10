@@ -3,11 +3,12 @@ import 'parent_dashboard_screen.dart';
 import 'parent_stats_screen.dart';
 
 class ParentTasksScreen extends StatelessWidget {
-  const ParentTasksScreen({super.key});
+  final String parentName;
+  const ParentTasksScreen({super.key, required this.parentName});
 
   @override
   Widget build(BuildContext context) {
-    final parentDashboard = ParentDashboardScreen(parentName: "Анна");
+    final parentDashboard = ParentDashboardScreen(parentName: parentName);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FC),
@@ -15,7 +16,7 @@ class ParentTasksScreen extends StatelessWidget {
         child: Column(
           children: [
             // 🔹 Шапка и навигация
-            parentDashboard.buildHeader(),
+            parentDashboard.buildHeader(context),
             parentDashboard.buildNavBar(context, 1),
 
             // 🔹 Контент страницы задач
@@ -31,7 +32,6 @@ class ParentTasksScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
 
-                    // Поля создания задачи
                     _buildTextField("Название задачи"),
                     const SizedBox(height: 12),
                     _buildDropdown(),
@@ -60,7 +60,6 @@ class ParentTasksScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
 
-                    // Пример задач
                     _buildTaskCard("Убрать комнату", "На проверке", 100),
                     _buildTaskCard("Выучить таблицу умножения", "Не выполнена", 200),
                     _buildTaskCard("Помыть посуду", "Не выполнена", 75),
@@ -122,12 +121,9 @@ class ParentTasksScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style:
-              const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          Text(status,
-              style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          Text(status, style: const TextStyle(color: Colors.grey, fontSize: 13)),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
