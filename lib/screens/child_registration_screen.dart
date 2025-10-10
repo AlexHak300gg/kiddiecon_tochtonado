@@ -1,8 +1,10 @@
+// lib/screens/child_registration_screen.dart
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
-import '../firebase_options.dart'; // убедись, что файл существует
+import 'package:google_fonts/google_fonts.dart';
+import '../firebase_options.dart';
+import 'child_home_screen.dart';
 
 class ChildRegistrationScreen extends StatefulWidget {
   const ChildRegistrationScreen({super.key});
@@ -19,7 +21,8 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
   String? _selectedAge;
   bool _parentApproved = false;
   bool _isLoading = false;
-  DatabaseReference? database;
+  DatabaseReference? _db;
+  Map<String, dynamic>? _foundParent;
 
   @override
   void initState() {
@@ -28,69 +31,128 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
   }
 
   Future<void> _initFirebase() async {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      database = FirebaseDatabase.instance.ref();
-    } catch (e) {
-      debugPrint("Ошибка инициализации Firebase: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Ошибка инициализации Firebase: $e")),
-      );
-    }
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    _db = FirebaseDatabase.instance.ref();
   }
 
-  Future<void> _registerChild() async {
-    if (database == null) {
+  /// 🔍 Проверка кода родителя из Firebase
+  Future<void> _checkParentCode() async {
+    final code = _parentCodeController.text.trim();
+    if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Firebase не инициализирован!')),
-      );
-      return;
-    }
-
-    if (_nameController.text.isEmpty ||
-        _selectedAge == null ||
-        _passwordController.text.length < 6 ||
-        !_parentApproved ||
-        _parentCodeController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пожалуйста, заполни все поля корректно')),
-      );
-      return;
-    }
-
-    if (_parentCodeController.text != '1234') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Неверный код родителя')),
+        const SnackBar(content: Text('Введите код родителя')),
       );
       return;
     }
 
     try {
       setState(() => _isLoading = true);
+      final snap = await _db!.child('invites/$code').get();
 
-      await database!.child('children').push().set({
-        'name': _nameController.text,
+      if (!snap.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Код не найден или истёк')),
+        );
+        setState(() => _foundParent = null);
+        return;
+      }
+
+      final data = Map<String, dynamic>.from(snap.value as Map);
+      final expiresAt = DateTime.parse(data['expiresAt']);
+      if (DateTime.now().isAfter(expiresAt)) {
+        await _db!.child('invites/$code').remove();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Срок действия кода истёк')),
+        );
+        setState(() => _foundParent = null);
+        return;
+      }
+
+      setState(() => _foundParent = data);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Родитель найден: ${data['parentName']}')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// 👶 Регистрация ребёнка с привязкой к родителю
+  Future<void> _registerChild() async {
+    if (_db == null) return;
+
+    if (_nameController.text.isEmpty ||
+        _passwordController.text.length < 6 ||
+        _selectedAge == null ||
+        !_parentApproved ||
+        _parentCodeController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Пожалуйста, заполни все поля')),
+      );
+      return;
+    }
+
+    if (_foundParent == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Проверь код родителя перед регистрацией')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final parentName = _foundParent!['parentName'];
+      final parentKey = parentName.replaceAll('.', '_');
+      final newChildRef = _db!.child('children').push();
+
+      await newChildRef.set({
+        'name': _nameController.text.trim(),
         'age': _selectedAge,
-        'password': _passwordController.text,
-        'parentCode': _parentCodeController.text,
-        'parentApproved': _parentApproved,
+        'password': _passwordController.text.trim(),
+        'parentName': parentName,
         'createdAt': DateTime.now().toIso8601String(),
       });
 
-      setState(() => _isLoading = false);
+      await _db!
+          .child('parents_children/$parentKey/${newChildRef.key}')
+          .set({
+        'childId': newChildRef.key,
+        'childName': _nameController.text.trim(),
+        'goal': 'Пока не установлена',
+        'balance': 0,
+        'progress': 0,
+      });
+
+      await _db!.child('invites/${_parentCodeController.text.trim()}').remove();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Аккаунт успешно создан! 🎉')),
+        const SnackBar(content: Text('Аккаунт ребёнка успешно создан! 🎉')),
       );
 
-      Navigator.pop(context);
+      // ✅ После регистрации — переход в ChildHomeScreen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChildHomeScreen(
+            childName: _nameController.text.trim(),
+            balance: 0,
+            goalName: 'Пока не установлена',
+            goalTarget: 0,
+            goalProgress: 0,
+          ),
+        ),
+      );
     } catch (e) {
-      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка регистрации: $e')),
       );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -125,10 +187,45 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
     );
   }
 
+  /// 🌈 Универсальная кнопка с градиентом
+  Widget _gradientButton({
+    required String text,
+    required VoidCallback onPressed,
+    bool loading = false,
+  }) {
+    return GestureDetector(
+      onTap: loading ? null : onPressed,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF6B00), Color(0xFFFF9A44)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Center(
+          child: loading
+              ? const CircularProgressIndicator(color: Colors.white)
+              : Text(
+            text,
+            style: GoogleFonts.nunito(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFE6F3FB),
+      backgroundColor: const Color(0xFFF5FAFF),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -136,24 +233,35 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Color(0xFFFF6B00)),
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(height: 10),
               Center(
                 child: Column(
                   children: [
-                    const CircleAvatar(
-                      radius: 36,
-                      backgroundColor: Colors.grey,
-                      child: Icon(Icons.star, color: Colors.white, size: 36),
+                    Container(
+                      height: 90,
+                      width: 90,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFFF6B00), Color(0xFFFF9A44)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: const Icon(Icons.person_add,
+                          color: Colors.white, size: 44),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     Text(
                       "Давай знакомиться!",
                       style: GoogleFonts.nunito(
-                        fontSize: 20,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                     ),
                   ],
@@ -174,7 +282,7 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
               DropdownButtonFormField<String>(
                 value: _selectedAge,
                 items: List.generate(
-                  10,
+                  13,
                       (i) => DropdownMenuItem(
                     value: (6 + i).toString(),
                     child: Text("${6 + i} лет"),
@@ -199,12 +307,13 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
               ),
               _buildTextField(
                 label: "Код родителя",
-                hint: "Введи уникальный код (например 1234)",
+                hint: "Введи код, который дал родитель",
                 controller: _parentCodeController,
               ),
               Row(
                 children: [
                   Checkbox(
+                    activeColor: const Color(0xFFFF6B00),
                     value: _parentApproved,
                     onChanged: (val) =>
                         setState(() => _parentApproved = val ?? false),
@@ -217,26 +326,17 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _registerChild,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                    "Создать аккаунт",
-                    style: TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.bold),
-                  ),
-                ),
+              const SizedBox(height: 16),
+              _gradientButton(
+                text: "Проверить код родителя",
+                onPressed: _checkParentCode,
+                loading: _isLoading,
+              ),
+              const SizedBox(height: 14),
+              _gradientButton(
+                text: "Создать аккаунт",
+                onPressed: _registerChild,
+                loading: _isLoading,
               ),
             ],
           ),
