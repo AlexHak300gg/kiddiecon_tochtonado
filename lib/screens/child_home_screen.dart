@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'child_stats_screen.dart'; // ✅ Подключаем новый экран статистики
+import 'child_stats_screen.dart';
+import 'child_tasks_screen.dart';
 
 class ChildHomeScreen extends StatefulWidget {
   final String childName;
@@ -38,7 +39,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 👋 Приветствие
+              // 👋 Greeting
               Row(
                 children: [
                   const CircleAvatar(
@@ -63,7 +64,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 💳 Карта ребёнка
+              // 💳 Card
               Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFF42A5F5),
@@ -108,7 +109,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
 
               const SizedBox(height: 24),
 
-              // 🎯 Цели
+              // 🎯 Goals
               Text(
                 "Мои цели",
                 style: GoogleFonts.nunito(
@@ -175,7 +176,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
 
               const SizedBox(height: 24),
 
-              // 🧩 Активные задания
+              // 🧩 Active tasks
               Text(
                 "Активные задания",
                 style: GoogleFonts.nunito(
@@ -196,7 +197,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
         ),
       ),
 
-      // ⚪️ Нижняя панель навигации
+      // ⚪ Bottom navigation
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.only(bottom: 20, left: 40, right: 40),
         child: Container(
@@ -216,9 +217,9 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildNavItem(Icons.home, 0),
-              _buildNavItem(Icons.task_alt, 1),
+              _buildNavItem(Icons.task_alt, 1), // ✅ Tasks
               _buildNavItem(Icons.center_focus_strong, 2),
-              _buildNavItem(Icons.show_chart, 3), // 📊 Статистика
+              _buildNavItem(Icons.show_chart, 3), // 📊 Stats
             ],
           ),
         ),
@@ -226,15 +227,22 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
     );
   }
 
-  // 🔘 Элемент навигации
+  // 🔘 Navigation item
   Widget _buildNavItem(IconData icon, int index) {
     final bool isSelected = _currentIndex == index;
     return GestureDetector(
       onTap: () {
         setState(() => _currentIndex = index);
 
-        // 👉 Переход на экран статистики
-        if (index == 3) {
+        // 👉 Navigation
+        if (index == 1) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChildTasksScreen(childName: widget.childName),
+            ),
+          );
+        } else if (index == 3) {
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -263,7 +271,7 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
     );
   }
 
-  // 🧩 Карточка задания
+  // 🧩 Task card
   Widget _taskCard(String title, int reward, bool done) {
     return Container(
       width: 150,
