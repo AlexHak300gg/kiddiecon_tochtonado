@@ -40,6 +40,7 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
+    // Проверка на пустые поля
     if (name.isEmpty ||
         email.isEmpty ||
         phone.isEmpty ||
@@ -51,6 +52,33 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
       return;
     }
 
+    // Проверка формата email
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите корректный адрес электронной почты')),
+      );
+      return;
+    }
+
+    // Проверка российского номера телефона
+    final phoneRegex = RegExp(r'^(?:\+7|8)\d{10}$');
+    if (!phoneRegex.hasMatch(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите корректный российский номер телефона')),
+      );
+      return;
+    }
+
+    // Проверка длины пароля
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Пароль должен содержать не менее 6 символов')),
+      );
+      return;
+    }
+
+    // Проверка совпадения паролей
     if (password != confirmPassword) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Пароли не совпадают')),
@@ -58,6 +86,7 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
       return;
     }
 
+    // Проверка согласия с условиями
     if (!_agreeToTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Необходимо согласиться с условиями')),
@@ -153,12 +182,12 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
 
               TextField(
                 controller: _nameController,
-                decoration:
-                _inputDecoration('ФИО', icon: Icons.person_outline),
+                decoration: _inputDecoration('ФИО', icon: Icons.person_outline),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
                 decoration: _inputDecoration('Email адрес',
                     icon: Icons.email_outlined),
               ),
