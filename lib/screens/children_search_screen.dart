@@ -67,7 +67,7 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
 
   /// 👶 Привязка ребёнка к родителю
   Future<void> _connectToParent() async {
-    if (_isConnecting) return; // 🔒 предотвращает повторное нажатие
+    if (_isConnecting) return;
     if (_foundParent == null || _nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Введите имя ребёнка')),
@@ -84,7 +84,14 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
       final parentName = _foundParent!['parentName'] ?? "Без имени";
       final parentCode = _codeController.text.trim();
 
-      // 🟣 1. Создаём запись ребёнка в "children"
+      /// ✅ Функция, очищающая строку от запрещённых символов Firebase
+      String sanitizeKey(String key) {
+        return key.replaceAll(RegExp(r'[.#$\\[\\]]'), '_');
+      }
+
+      final safeParentKey = sanitizeKey(parentName);
+
+      // 🟣 1. Создаём запись ребёнка
       final newChildRef = _db.child('children').push();
       await newChildRef.set({
         'name': _nameController.text.trim(),
@@ -95,10 +102,10 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'createdAt': DateTime.now().toIso8601String(),
       });
 
-      // 🟢 2. Привязываем ребёнка к родителю
+      // 🟢 2. Привязываем ребёнка к родителю (безопасный ключ!)
       await _db
           .child('parents_children')
-          .child(parentName)
+          .child(safeParentKey)
           .child(newChildRef.key!)
           .set({
         'childId': newChildRef.key,
@@ -108,7 +115,7 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'progress': 0,
       });
 
-      // 🧹 Удаляем код приглашения
+      // 🧹 3. Удаляем код приглашения
       await _db.child('invites/$parentCode').remove();
 
       // ✅ Переход на домашний экран ребёнка
