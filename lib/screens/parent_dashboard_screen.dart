@@ -1,16 +1,14 @@
 // lib/screens/parent_dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-
 import 'parent_tasks_screen.dart';
 import 'parent_stats_screen.dart';
-import 'fake_qr_scanner_screen.dart';
 
 class ParentDashboardScreen extends StatelessWidget {
   final String parentName;
   const ParentDashboardScreen({super.key, required this.parentName});
 
-  // HEADER
+  // 🔹 Шапка
   Widget buildHeader(BuildContext context) {
     final parentKey = parentName.replaceAll('.', '_');
 
@@ -55,7 +53,7 @@ class ParentDashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Баланс — ищем по email и по имени
+          // Баланс
           StreamBuilder(
             stream: FirebaseDatabase.instance.ref('parents').onValue,
             builder: (context, snapshot) {
@@ -125,7 +123,7 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // NAVIGATION BAR
+  // 🔹 Нижнее меню
   Widget buildNavBar(BuildContext context, int selectedIndex) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -140,8 +138,7 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _navItem(
-      BuildContext context, IconData icon, String label, int index, int selected) {
+  Widget _navItem(BuildContext context, IconData icon, String label, int index, int selected) {
     final bool isActive = index == selected;
     return GestureDetector(
       onTap: () {
@@ -149,20 +146,17 @@ class ParentDashboardScreen extends StatelessWidget {
         if (index == 1) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-                builder: (_) => ParentTasksScreen(parentName: parentName)),
+            MaterialPageRoute(builder: (_) => ParentTasksScreen(parentName: parentName)),
           );
         } else if (index == 2) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-                builder: (_) => ParentStatsScreen(parentName: parentName)),
+            MaterialPageRoute(builder: (_) => ParentStatsScreen(parentName: parentName)),
           );
         } else {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-                builder: (_) => ParentDashboardScreen(parentName: parentName)),
+            MaterialPageRoute(builder: (_) => ParentDashboardScreen(parentName: parentName)),
           );
         }
       },
@@ -189,7 +183,7 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // CHILDREN SECTION
+  // 🔹 Список детей
   Widget _buildChildrenSection() {
     final parentKey = parentName.replaceAll('.', '_');
 
@@ -204,8 +198,7 @@ class ParentDashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           FutureBuilder<DataSnapshot>(
-            future:
-            FirebaseDatabase.instance.ref('parents_children/$parentKey').get(),
+            future: FirebaseDatabase.instance.ref('parents_children/$parentKey').get(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -276,55 +269,73 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // QUICK ACTIONS
+  // 🔹 Быстрые действия (только 2 кнопки)
   Widget _buildQuickActions(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text("Быстрые действия",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Row(children: [
-          _quickAction(Icons.add, "Новая задача", Colors.blue),
-          _quickAction(Icons.compare_arrows, "Перевести", Colors.green,
-              onTap: () => _showTransferDialog(context)),
-        ]),
-        const SizedBox(height: 10),
-        Row(children: [
-          _quickAction(Icons.check_circle_outline, "Проверить", Colors.purple),
-          _quickAction(Icons.qr_code, "Пригласить", Colors.orange,
-              onTap: () => _showInviteDialog(context)),
-        ]),
-      ]),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Быстрые действия",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _quickAction(
+                  Icons.compare_arrows,
+                  "Перевести",
+                  Colors.green,
+                  onTap: () => _showTransferDialog(context),
+                ),
+              ),
+              Expanded(
+                child: _quickAction(
+                  Icons.qr_code,
+                  "Пригласить",
+                  Colors.orange,
+                  onTap: () => _showInviteDialog(context),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _quickAction(IconData icon, String label, Color color,
       {VoidCallback? onTap}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.all(4),
-          height: 90,
-          decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(14)),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(icon, color: color, size: 28),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.all(6),
+        height: 100,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 30),
             const SizedBox(height: 8),
-            Text(label,
-                style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14)),
-          ]),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // 🔹 Перевод средств
+  // 🔹 Диалог перевода
   void _showTransferDialog(BuildContext context) async {
     final db = FirebaseDatabase.instance.ref();
     final parentKey = parentName.replaceAll('.', '_');
@@ -347,8 +358,7 @@ class ParentDashboardScreen extends StatelessWidget {
       builder: (context) {
         return StatefulBuilder(builder: (context, setState) {
           return AlertDialog(
-            shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             title: const Text("Перевод средств ребёнку"),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               DropdownButtonFormField<String>(
@@ -393,8 +403,8 @@ class ParentDashboardScreen extends StatelessWidget {
 
                   await parentRef.set(parentBalance - amount);
 
-                  final childBalanceRef = db
-                      .child('parents_children/$parentKey/$selectedChildId/balance');
+                  final childBalanceRef =
+                  db.child('parents_children/$parentKey/$selectedChildId/balance');
                   final childSnap = await childBalanceRef.get();
                   double childBalance = 0.0;
                   if (childSnap.exists && childSnap.value != null) {
@@ -430,9 +440,7 @@ class ParentDashboardScreen extends StatelessWidget {
       'parentKey': parentKey,
       'parentName': parentName,
       'createdAt': DateTime.now().toIso8601String(),
-      'expiresAt': DateTime.now()
-          .add(const Duration(minutes: 2))
-          .toIso8601String(),
+      'expiresAt': DateTime.now().add(const Duration(minutes: 2)).toIso8601String(),
     });
     Future.delayed(const Duration(minutes: 2), () => codeRef.remove());
 
@@ -445,19 +453,23 @@ class ParentDashboardScreen extends StatelessWidget {
           children: [
             const Icon(Icons.qr_code, size: 80, color: Color(0xFF6F6BF8)),
             const SizedBox(height: 10),
-            const Text("Код для ребёнка (действует 2 мин):"),
+            const Text("Код для ребёнка (действует 2 минуты):"),
             const SizedBox(height: 10),
-            Text(code,
-                style: const TextStyle(
-                    fontSize: 24,
-                    color: Color(0xFF6F6BF8),
-                    fontWeight: FontWeight.bold)),
+            Text(
+              code,
+              style: const TextStyle(
+                fontSize: 24,
+                color: Color(0xFF6F6BF8),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Закрыть"))
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Закрыть"),
+          ),
         ],
       ),
     );
@@ -469,13 +481,15 @@ class ParentDashboardScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF6F8FC),
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Column(children: [
-            buildHeader(context),
-            buildNavBar(context, 0),
-            _buildChildrenSection(),
-            _buildQuickActions(context),
-            const SizedBox(height: 20),
-          ]),
+          child: Column(
+            children: [
+              buildHeader(context),
+              buildNavBar(context, 0),
+              _buildChildrenSection(),
+              _buildQuickActions(context),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
