@@ -15,6 +15,7 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
   final _nameController = TextEditingController();
 
   bool _loading = false;
+  bool _isConnecting = false;
   Map<String, dynamic>? _foundParent;
 
   /// 🔍 Поиск родителя по коду
@@ -42,11 +43,12 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
       } else {
         final data = Map<String, dynamic>.from(snapshot.value as Map);
         final expiresAt = DateTime.parse(data['expiresAt']);
+
         if (DateTime.now().isAfter(expiresAt)) {
+          await _db.child('invites/$code').remove();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Срок действия кода истёк')),
           );
-          await _db.child('invites/$code').remove();
         } else {
           setState(() {
             _foundParent = data;
@@ -64,6 +66,7 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
 
   /// 👶 Привязка ребёнка к родителю
   Future<void> _connectToParent() async {
+    if (_isConnecting) return; // 🔒 предотвращает повторное нажатие
     if (_foundParent == null || _nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Введите имя ребёнка')),
@@ -71,13 +74,16 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _isConnecting = true;
+    });
 
     try {
-      final parentName = _foundParent!['parentName'];
+      final parentName = _foundParent!['parentName'] ?? "Без имени";
       final parentCode = _codeController.text.trim();
 
-      // 🟣 1. Добавляем ребёнка в общий список
+      // 🟣 1. Создаём запись ребёнка в "children"
       final newChildRef = _db.child('children').push();
       await newChildRef.set({
         'name': _nameController.text.trim(),
@@ -88,11 +94,11 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'createdAt': DateTime.now().toIso8601String(),
       });
 
-      // 🟢 2. Добавляем в список родителя
+      // 🟢 2. Привязываем ребёнка к родителю
       await _db
           .child('parents_children')
           .child(parentName)
-          .push()
+          .child(newChildRef.key!)
           .set({
         'childId': newChildRef.key,
         'childName': _nameController.text.trim(),
@@ -101,13 +107,15 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'progress': 0,
       });
 
+      // 🧹 Удаляем код приглашения, чтобы им нельзя было воспользоваться повторно
+      await _db.child('invites/$parentCode').remove();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ребёнок успешно привязан к родителю $parentName!'),
+          content: Text('Ребёнок успешно привязан к родителю "$parentName"!'),
         ),
       );
 
-      // 🧹 Очистка полей
       setState(() {
         _foundParent = null;
         _codeController.clear();
@@ -118,7 +126,10 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         SnackBar(content: Text('Ошибка при добавлении: $e')),
       );
     } finally {
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _isConnecting = false;
+      });
     }
   }
 
@@ -215,7 +226,7 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: _connectToParent,
+                        onPressed: _loading ? null : _connectToParent,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           shape: RoundedRectangleBorder(

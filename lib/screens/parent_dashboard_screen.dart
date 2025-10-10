@@ -7,8 +7,10 @@ class ParentDashboardScreen extends StatelessWidget {
   final String parentName;
   const ParentDashboardScreen({super.key, required this.parentName});
 
-  // 🌟 Шапка родителя
+  // 🌟 Шапка родителя с Firebase-балансом
   Widget buildHeader() {
+    final dbRef = FirebaseDatabase.instance.ref('parents/$parentName/balance');
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
@@ -49,39 +51,57 @@ class ParentDashboardScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF7E7AFB),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.account_balance_wallet,
-                    color: Colors.white, size: 28),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        "Общий баланс детей",
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      Text(
-                        "₽12,450",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 22,
-                        ),
-                      ),
-                    ],
-                  ),
+
+          // 🔹 Баланс родителя — в реальном времени из Firebase
+          StreamBuilder(
+            stream: dbRef.onValue,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                    child: CircularProgressIndicator(color: Colors.white));
+              }
+
+              double balance = 0.0;
+              if (snapshot.hasData && snapshot.data?.snapshot.value != null) {
+                balance =
+                    (snapshot.data!.snapshot.value as num?)?.toDouble() ?? 0.0;
+              }
+
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7E7AFB),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const Icon(Icons.sync, color: Colors.white),
-              ],
-            ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_balance_wallet,
+                        color: Colors.white, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Баланс на счёте",
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          Text(
+                            "₽${balance.toStringAsFixed(0)}",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.sync, color: Colors.white),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -156,7 +176,7 @@ class ParentDashboardScreen extends StatelessWidget {
     );
   }
 
-  // 🌟 Секция детей (прокручиваемая)
+  // 🌟 Секция детей
   Widget _buildChildrenSection() {
     final parentKey = parentName.replaceAll('.', '_');
 
@@ -189,7 +209,7 @@ class ParentDashboardScreen extends StatelessWidget {
               final children = data.values.map((childData) {
                 final child = Map<String, dynamic>.from(childData);
                 final name = child['childName'] ?? 'Без имени';
-                final goal = 'Цель: велосипед'; // пока тестовая цель
+                final goal = 'Цель: велосипед'; // временная цель
                 final balance = '₽${child['balance'] ?? '0'}';
                 final progress = (child['progress'] ?? 35);
 
@@ -198,9 +218,7 @@ class ParentDashboardScreen extends StatelessWidget {
 
               return SizedBox(
                 height: 230,
-                child: ListView(
-                  children: children,
-                ),
+                child: ListView(children: children),
               );
             },
           ),
@@ -401,8 +419,8 @@ class ParentDashboardScreen extends StatelessWidget {
                     ),
                   ),
                   icon: const Icon(Icons.close, color: Colors.white),
-                  label:
-                  const Text("Закрыть", style: TextStyle(color: Colors.white)),
+                  label: const Text("Закрыть",
+                      style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
