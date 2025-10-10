@@ -67,4 +67,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'rffrrfrere.firebasestorage.app',
     iosBundleId: 'com.example.untitled14',
   );
+
 }

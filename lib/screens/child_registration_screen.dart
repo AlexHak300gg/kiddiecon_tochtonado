@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import '../firebase_options.dart'; // убедись, что файл существует
 
 class ChildRegistrationScreen extends StatefulWidget {
   const ChildRegistrationScreen({super.key});
 
   @override
-  State<ChildRegistrationScreen> createState() => _ChildRegistrationScreenState();
+  State<ChildRegistrationScreen> createState() =>
+      _ChildRegistrationScreenState();
 }
 
 class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
@@ -16,10 +19,36 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
   String? _selectedAge;
   bool _parentApproved = false;
   bool _isLoading = false;
+  DatabaseReference? database;
 
-  final database = FirebaseDatabase.instance.ref();
+  @override
+  void initState() {
+    super.initState();
+    _initFirebase();
+  }
+
+  Future<void> _initFirebase() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      database = FirebaseDatabase.instance.ref();
+    } catch (e) {
+      debugPrint("Ошибка инициализации Firebase: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Ошибка инициализации Firebase: $e")),
+      );
+    }
+  }
 
   Future<void> _registerChild() async {
+    if (database == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Firebase не инициализирован!')),
+      );
+      return;
+    }
+
     if (_nameController.text.isEmpty ||
         _selectedAge == null ||
         _passwordController.text.length < 6 ||
@@ -41,7 +70,7 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
     try {
       setState(() => _isLoading = true);
 
-      await database.child('children').push().set({
+      await database!.child('children').push().set({
         'name': _nameController.text,
         'age': _selectedAge,
         'password': _passwordController.text,
@@ -106,14 +135,11 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 🔙 Назад
               IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded),
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(height: 10),
-
-              // ⭐ Заголовок
               Center(
                 child: Column(
                   children: [
@@ -133,15 +159,12 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 30),
-
               _buildTextField(
                 label: "Как тебя зовут?",
                 hint: "Введи своё имя",
                 controller: _nameController,
               ),
-
               Text(
                 "Сколько тебе лет?",
                 style: GoogleFonts.nunito(
@@ -167,26 +190,18 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 16),
-
               _buildTextField(
                 label: "Придумай пароль",
                 hint: "Минимум 6 символов",
                 controller: _passwordController,
                 obscure: true,
               ),
-
-              // 🔹 Поле для ввода кода родителя
               _buildTextField(
                 label: "Код родителя",
                 hint: "Введи уникальный код (например 1234)",
                 controller: _parentCodeController,
               ),
-
-              const SizedBox(height: 4),
-
-              // 🔸 Согласие родителей
               Row(
                 children: [
                   Checkbox(
@@ -202,10 +217,7 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
-
-              // 🔘 Кнопка создания
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(

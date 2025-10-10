@@ -1,8 +1,7 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:untitled12/screens/register_screen_parrant.dart';
-import 'register_screen_parrant.dart'; // 👈 добавлено
 import 'preim_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
@@ -16,55 +15,82 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     with TickerProviderStateMixin {
   late AnimationController _gradientController;
   late AnimationController _glowController;
+  late AnimationController _flyInController;
+
+  late Animation<Offset> _flyPath;
+  late Animation<double> _scaleBounce;
 
   final List<Color> colors = [
-    const Color(0xFF1E3A8A),
-    const Color(0xFFF6514C),
-    const Color(0xFFFDB901),
+    const Color(0xFF171D33), // глубокий синий
+    const Color(0xFF5365E5), // голубой
+    const Color(0xFFF6514C), // жёлтый
+    const Color(0xFFFDB901), // оранжево-красный
   ];
-
-  final List<double> stops = [0.0, 0.5, 1.0];
 
   @override
   void initState() {
     super.initState();
+
+    // 🌈 Градиент плавно «переливается»
     _gradientController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 20),
+      duration: const Duration(seconds: 14),
     )..repeat(reverse: true);
 
+    // 💫 Пульсация и лёгкое движение звезды
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-      lowerBound: 0.6,
-      upperBound: 1.0,
+      lowerBound: 0.85,
+      upperBound: 1.15,
     )..repeat(reverse: true);
+
+    // ⭐ Анимация прилёта звезды
+    _flyInController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    );
+
+    // 🚀 Дуга полёта (плавная, слегка выгнутая вверх)
+    _flyPath = TweenSequence<Offset>([
+      TweenSequenceItem(
+        tween: Tween<Offset>(
+          begin: const Offset(-1.5, -1.4),
+          end: const Offset(-0.4, -0.6),
+        ).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween<Offset>(
+          begin: const Offset(-0.4, -0.6),
+          end: const Offset(0.0, 0.0),
+        ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 60,
+      ),
+    ]).animate(_flyInController);
+
+    // 🎯 Мягкий подпрыгивающий масштаб
+    _scaleBounce = Tween<double>(begin: 0.4, end: 1.0)
+        .animate(CurvedAnimation(parent: _flyInController, curve: Curves.easeOutBack));
+
+    _flyInController.forward();
   }
 
   @override
   void dispose() {
     _gradientController.dispose();
     _glowController.dispose();
+    _flyInController.dispose();
     super.dispose();
   }
 
   Future<void> _selectRole(String role) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userRole', role);
-
-    // ✅ Изменено: если выбрал "Родитель" → переход на экран регистрации
-    if (role == 'parent') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const RegisterScreenParrant()),
-      );
-    } else {
-      // если ребёнок — оставим поведение как было
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => PreimScreen(role: role)),
-      );
-    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => PreimScreen(role: role)),
+    );
   }
 
   Widget _animatedButton({
@@ -74,7 +100,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     required Gradient gradient,
   }) {
     bool isPressed = false;
-
     return StatefulBuilder(
       builder: (context, setInnerState) {
         return GestureDetector(
@@ -130,11 +155,17 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
     return Scaffold(
       body: AnimatedBuilder(
-        animation: Listenable.merge([_gradientController, _glowController]),
+        animation:
+        Listenable.merge([_gradientController, _glowController, _flyInController]),
         builder: (_, __) {
-          double t = _gradientController.value;
-          Alignment begin = Alignment(0.0, 1.0 - 2 * t);
-          Alignment end = Alignment(0.0, -1.0 - 2 * t);
+          // движение фона (параллакс)
+          final t = _gradientController.value;
+          final begin = Alignment(-1.0 + 2 * t, -1.0);
+          final end = Alignment(1.0 - 2 * t, 1.0);
+
+          // лёгкое покачивание звезды после посадки
+          final dx = 4 * sin(_gradientController.value * 2 * pi);
+          final dy = 2 * cos(_gradientController.value * 2 * pi);
 
           return Container(
             width: size.width,
@@ -144,42 +175,47 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                 begin: begin,
                 end: end,
                 colors: colors,
-                stops: stops,
                 tileMode: TileMode.mirror,
               ),
             ),
             child: SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 30.0),
-                    child: Row(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Spacer(),
+
+                    // 🌟 Логотип и звезда
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Text(
                           "KiddieCoin",
                           style: GoogleFonts.nunito(
-                            fontSize: 56,
+                            fontSize: 52,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                             letterSpacing: 0.5,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        AnimatedBuilder(
-                          animation: _glowController,
-                          builder: (context, child) => Transform.scale(
-                            scale: 1 + 0.1 * _glowController.value,
+                        const SizedBox(width: 10),
+
+                        // ⭐ Плавный прилёт и мягкий пульс
+                        Transform.translate(
+                          offset: Offset(
+                            _flyPath.value.dx * size.width * 0.4 + dx,
+                            _flyPath.value.dy * size.height * 0.4 + dy,
+                          ),
+                          child: Transform.scale(
+                            scale: _scaleBounce.value * _glowController.value,
                             child: Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.amber
-                                        .withOpacity(0.6 * _glowController.value),
-                                    blurRadius: 20,
+                                    color: Colors.amber.withOpacity(0.8),
+                                    blurRadius: 25 + 8 * _glowController.value,
                                     spreadRadius: 4,
                                   ),
                                 ],
@@ -187,18 +223,16 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                               child: const Icon(
                                 Icons.star_rounded,
                                 color: Colors.amber,
-                                size: 65,
+                                size: 60,
                               ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 30.0),
-                    child: Text(
+
+                    const SizedBox(height: 10),
+                    Text(
                       "Монетка за монеткой —\nк большой цели!",
                       style: GoogleFonts.nunito(
                         fontSize: 18,
@@ -206,21 +240,22 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                         height: 1.4,
                       ),
                     ),
-                  ),
-                  const Spacer(),
-                  Center(
-                    child: Text(
-                      "Выберите свою роль для продолжения",
-                      style: GoogleFonts.nunito(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.8),
+
+                    const Spacer(),
+
+                    Center(
+                      child: Text(
+                        "Выберите свою роль для продолжения",
+                        style: GoogleFonts.nunito(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.85),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: Row(
+                    const SizedBox(height: 20),
+
+                    // 🔘 Кнопки выбора роли
+                    Row(
                       children: [
                         Expanded(
                           child: _animatedButton(
@@ -228,12 +263,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                             icon: Icons.person,
                             onTap: () => _selectRole('parent'),
                             gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFF1E3A8A),
-                                Color(0xFF3B82F6),
-                              ],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
+                              colors: [Color(0xFF171D33), Color(0xFF5365E5)],
                             ),
                           ),
                         ),
@@ -244,20 +274,16 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                             icon: Icons.child_care,
                             onTap: () => _selectRole('child'),
                             gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFFF6514C),
-                                Color(0xFFFDB901),
-                              ],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
+                              colors: [Color(0xFFF6514C), Color(0xFFFDB901)],
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 30),
-                ],
+
+                    const SizedBox(height: 40),
+                  ],
+                ),
               ),
             ),
           );
