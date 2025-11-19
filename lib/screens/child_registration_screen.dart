@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../firebase_options.dart';
 import 'child_home_screen.dart';
+import 'qr_scanner_screen.dart';
+import 'setup_security_screen.dart';
 
 class ChildRegistrationScreen extends StatefulWidget {
   const ChildRegistrationScreen({super.key});
@@ -34,9 +37,20 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
     _db = FirebaseDatabase.instance.ref();
   }
 
-  /// 🔍 Проверка кода родителя из Firebase
+  Future<void> _scanQrCode() async {
+    final code = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+    );
+
+    if (code != null && code.isNotEmpty) {
+      _parentCodeController.text = code.toUpperCase();
+      await _checkParentCode();
+    }
+  }
+
   Future<void> _checkParentCode() async {
-    final code = _parentCodeController.text.trim();
+    final code = _parentCodeController.text.trim().toUpperCase();
     if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Введите код родителя')),
@@ -46,22 +60,71 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
 
     try {
       setState(() => _isLoading = true);
-      final snap = await _db!.child('invites/$code').get();
+      final snap = await _db!.child('inviteCodes/$code').get();
 
       if (!snap.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Код не найден или истёк')),
+          const SnackBar(
+            content: Text('Код не найден или истёк'),
+            backgroundColor: Colors.red,
+          ),
         );
         setState(() => _foundParent = null);
         return;
       }
 
       final data = Map<String, dynamic>.from(snap.value as Map);
+
+      if (data['isUsed'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Этот код уже использован'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _foundParent = null);
+        return;
+      }
+
       final expiresAt = DateTime.parse(data['expiresAt']);
       if (DateTime.now().isAfter(expiresAt)) {
-        await _db!.child('invites/$code').remove();
+        await _db!.child('inviteCodes/$code').remove();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Срок действия кода истёк')),
+          const SnackBar(
+            content: Text('Срок действия кода истёк'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _foundParent = null);
+        return;
+      }
+
+      final parentKey = data['parentKey'];
+      final parentExists = await _db!.child('parents/$parentKey').get();
+      if (!parentExists.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Родитель не найден'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _foundParent = null);
+        return;
+      }
+
+      final childrenSnap = await _db!.child('parents_children/$parentKey').get();
+      int childrenCount = 0;
+      if (childrenSnap.exists && childrenSnap.value != null) {
+        final children = childrenSnap.value as Map;
+        childrenCount = children.length;
+      }
+
+      if (childrenCount >= 5) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('У родителя уже максимальное количество детей (5)'),
+            backgroundColor: Colors.red,
+          ),
         );
         setState(() => _foundParent = null);
         return;
@@ -69,19 +132,24 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
 
       setState(() => _foundParent = data);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Родитель найден: ${data['parentName']}')),
+        SnackBar(
+          content: Text('Родитель найден: ${data['parentName']}'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
+        SnackBar(
+          content: Text('Ошибка: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  /// 👶 Регистрация ребёнка с привязкой к родителю
-  Future<void> _registerChild() async {
+  Future<void> _showConfirmationDialog() async {
     if (_db == null) return;
 
     if (_nameController.text.isEmpty ||
@@ -102,11 +170,80 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
       return;
     }
 
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Подтверждение привязки',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Вы собираетесь привязаться к родителю:',
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6F6BF8).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.person, color: Color(0xFF6F6BF8)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _foundParent!['parentName'],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'После привязки вы сможете получать деньги и выполнять задания.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6F6BF8),
+            ),
+            child: const Text('Подтвердить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _registerChild();
+    }
+  }
+
+  Future<void> _registerChild() async {
     setState(() => _isLoading = true);
 
     try {
       final parentName = _foundParent!['parentName'];
-      final parentKey = parentName.replaceAll('.', '_');
+      final parentKey = _foundParent!['parentKey'];
+      final code = _parentCodeController.text.trim().toUpperCase();
       final newChildRef = _db!.child('children').push();
 
       await newChildRef.set({
@@ -114,6 +251,7 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
         'age': _selectedAge,
         'password': _passwordController.text.trim(),
         'parentName': parentName,
+        'parentKey': parentKey,
         'createdAt': DateTime.now().toIso8601String(),
       });
 
@@ -128,26 +266,46 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
         'progress': 0,
       });
 
-      await _db!.child('invites/${_parentCodeController.text.trim()}').remove();
+      await _db!.child('inviteCodes/$code').update({
+        'isUsed': true,
+        'usedBy': newChildRef.key,
+        'usedAt': DateTime.now().toIso8601String(),
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Аккаунт ребёнка успешно создан! 🎉')),
+        const SnackBar(
+          content: Text('Аккаунт ребёнка успешно создан! 🎉'),
+          backgroundColor: Colors.green,
+        ),
       );
 
-      // ✅ Переход в ChildHomeScreen (баланс всегда 0)
+      if (!mounted) return;
+
+      // Сохраняем данные пользователя в SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userRole', 'child');
+      await prefs.setString('childId', newChildRef.key!);
+      await prefs.setString('childName', _nameController.text.trim());
+      await prefs.setString('parentKey', parentKey);
+      await prefs.setString('parentName', parentName);
+      await prefs.setBool('firstLoginDone', true);
+
+      // После успешной регистрации ребёнка, перенаправляем на SetupSecurityScreen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => ChildHomeScreen(
-            childId: newChildRef.key!,
-            parentKey: parentKey,
-            childName: _nameController.text.trim(),
+          builder: (_) => SetupSecurityScreen(
+            userRole: 'child',
+            isFirstTime: true,
           ),
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка регистрации: $e')),
+        SnackBar(
+          content: Text('Ошибка регистрации: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() => _isLoading = false);
@@ -189,6 +347,8 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
     required String text,
     required VoidCallback onPressed,
     bool loading = false,
+    Color? color,
+    IconData? icon,
   }) {
     return GestureDetector(
       onTap: loading ? null : onPressed,
@@ -196,24 +356,36 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF6B00), Color(0xFFFF9A44)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          gradient: color == null
+              ? const LinearGradient(
+                  colors: [Color(0xFFFF6B00), Color(0xFFFF9A44)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: color,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Center(
           child: loading
               ? const CircularProgressIndicator(color: Colors.white)
-              : Text(
-            text,
-            style: GoogleFonts.nunito(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (icon != null) ...[
+                      Icon(icon, color: Colors.white),
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      text,
+                      style: GoogleFonts.nunito(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -302,11 +474,31 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
                 controller: _passwordController,
                 obscure: true,
               ),
-              _buildTextField(
-                label: "Код родителя",
-                hint: "Введи код, который дал родитель",
-                controller: _parentCodeController,
+              Text(
+                "Код родителя",
+                style: GoogleFonts.nunito(
+                    color: Colors.black87, fontWeight: FontWeight.w600),
               ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _parentCodeController,
+                decoration: InputDecoration(
+                  hintText: "Введи код или отсканируй QR",
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.qr_code_scanner, color: Color(0xFFFF6B00)),
+                    onPressed: _scanQrCode,
+                    tooltip: 'Сканировать QR-код',
+                  ),
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Checkbox(
@@ -328,12 +520,14 @@ class _ChildRegistrationScreenState extends State<ChildRegistrationScreen> {
                 text: "Проверить код родителя",
                 onPressed: _checkParentCode,
                 loading: _isLoading,
+                icon: Icons.search,
               ),
               const SizedBox(height: 14),
               _gradientButton(
                 text: "Создать аккаунт",
-                onPressed: _registerChild,
+                onPressed: _showConfirmationDialog,
                 loading: _isLoading,
+                icon: Icons.check_circle,
               ),
             ],
           ),

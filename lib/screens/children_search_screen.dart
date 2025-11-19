@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'child_home_screen.dart';
+import 'qr_scanner_screen.dart';
+import 'setup_security_screen.dart';
 
 class ChildrenSearchScreen extends StatefulWidget {
   const ChildrenSearchScreen({super.key});
@@ -19,9 +22,20 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
   bool _isConnecting = false;
   Map<String, dynamic>? _foundParent;
 
-  /// 🔍 Поиск родителя по коду
+  Future<void> _scanQrCode() async {
+    final code = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+    );
+
+    if (code != null && code.isNotEmpty) {
+      _codeController.text = code.toUpperCase();
+      await _searchParent();
+    }
+  }
+
   Future<void> _searchParent() async {
-    final code = _codeController.text.trim();
+    final code = _codeController.text.trim().toUpperCase();
     if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Введите код приглашения")),
@@ -35,46 +49,168 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
     });
 
     try {
-      final snapshot = await _db.child('invites/$code').get();
+      final snapshot = await _db.child('inviteCodes/$code').get();
 
       if (!snapshot.exists) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Код не найден или истёк')),
+          const SnackBar(
+            content: Text('Код не найден или истёк'),
+            backgroundColor: Colors.red,
+          ),
         );
-      } else {
-        final data = Map<String, dynamic>.from(snapshot.value as Map);
-        final expiresAt = DateTime.parse(data['expiresAt']);
-
-        if (DateTime.now().isAfter(expiresAt)) {
-          await _db.child('invites/$code').remove();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Срок действия кода истёк')),
-          );
-        } else {
-          setState(() => _foundParent = data);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Родитель найден: ${data['parentName']}')),
-          );
-        }
+        return;
       }
+
+      final data = Map<String, dynamic>.from(snapshot.value as Map);
+
+      if (data['isUsed'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Этот код уже использован'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final expiresAt = DateTime.parse(data['expiresAt']);
+
+      if (DateTime.now().isAfter(expiresAt)) {
+        await _db.child('inviteCodes/$code').remove();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Срок действия кода истёк'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final parentKey = data['parentKey'];
+      final parentExists = await _db.child('parents/$parentKey').get();
+      if (!parentExists.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Родитель не найден'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final childrenSnap = await _db.child('parents_children/$parentKey').get();
+      int childrenCount = 0;
+      if (childrenSnap.exists && childrenSnap.value != null) {
+        final children = childrenSnap.value as Map;
+        childrenCount = children.length;
+      }
+
+      if (childrenCount >= 5) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('У родителя уже максимальное количество детей (5)'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      setState(() => _foundParent = data);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Родитель найден: ${data['parentName']}'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Ошибка: $e")),
+        SnackBar(
+          content: Text("Ошибка: $e"),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() => _loading = false);
     }
   }
 
-  /// 👶 Привязка ребёнка к родителю
-  Future<void> _connectToParent() async {
-    if (_isConnecting) return;
+  Future<void> _showConfirmationDialog() async {
     if (_foundParent == null || _nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Введите имя ребёнка')),
       );
       return;
     }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Подтверждение привязки',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Вы собираетесь привязаться к родителю:',
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6F6BF8).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.person, color: Color(0xFF6F6BF8)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _foundParent!['parentName'],
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'После привязки вы сможете получать деньги и выполнять задания.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6F6BF8),
+            ),
+            child: const Text('Подтвердить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _connectToParent();
+    }
+  }
+
+  Future<void> _connectToParent() async {
+    if (_isConnecting) return;
 
     setState(() {
       _loading = true;
@@ -83,21 +219,14 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
 
     try {
       final parentName = _foundParent!['parentName'] ?? "Без имени";
-      final parentCode = _codeController.text.trim();
+      final parentKey = _foundParent!['parentKey'];
+      final code = _codeController.text.trim().toUpperCase();
 
-      // создаём безопасный ключ для Firebase
-      String sanitizeKey(String key) {
-        return key.replaceAll(RegExp(r'[.#$\[\]]'), '_');
-      }
-
-      final safeParentKey = sanitizeKey(parentName);
-
-      // создаём новую запись ребёнка
       final newChildRef = _db.child('children').push();
       await newChildRef.set({
         'name': _nameController.text.trim(),
         'parentName': parentName,
-        'parentCode': parentCode,
+        'parentKey': parentKey,
         'goal': 'Пока не установлена',
         'balance': 0,
         'progress': 0,
@@ -105,10 +234,9 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'createdAt': DateTime.now().toIso8601String(),
       });
 
-      // создаём ссылку у родителя
       await _db
           .child('parents_children')
-          .child(safeParentKey)
+          .child(parentKey)
           .child(newChildRef.key!)
           .set({
         'childId': newChildRef.key,
@@ -119,27 +247,46 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
         'target': 0,
       });
 
-      // удаляем использованный код
-      await _db.child('invites/$parentCode').remove();
+      await _db.child('inviteCodes/$code').update({
+        'isUsed': true,
+        'usedBy': newChildRef.key,
+        'usedAt': DateTime.now().toIso8601String(),
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ребёнок успешно подключён! 🎉')),
+        const SnackBar(
+          content: Text('Ребёнок успешно подключён! 🎉'),
+          backgroundColor: Colors.green,
+        ),
       );
 
-      // ✅ Переход в домашний экран ребёнка
+      if (!mounted) return;
+
+      // Сохраняем данные пользователя в SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userRole', 'child');
+      await prefs.setString('childId', newChildRef.key!);
+      await prefs.setString('childName', _nameController.text.trim());
+      await prefs.setString('parentKey', parentKey);
+      await prefs.setString('parentName', parentName);
+      await prefs.setBool('firstLoginDone', true);
+
+      // После успешного подключения ребёнка, перенаправляем на SetupSecurityScreen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => ChildHomeScreen(
-            childId: newChildRef.key!,
-            parentKey: safeParentKey,
-            childName: _nameController.text.trim(),
+          builder: (_) => SetupSecurityScreen(
+            userRole: 'child',
+            isFirstTime: true,
           ),
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка при добавлении: $e')),
+        SnackBar(
+          content: Text('Ошибка при добавлении: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       setState(() {
@@ -156,7 +303,6 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // 🔙 Кнопка "Назад"
             Positioned(
               top: 10,
               left: 10,
@@ -184,7 +330,6 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
               ),
             ),
 
-            // 🧩 Основной экран
             Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -193,7 +338,6 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                   children: [
                     const SizedBox(height: 40),
 
-                    // 🟠 Иконка
                     Container(
                       height: 80,
                       width: 80,
@@ -220,12 +364,17 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // Поле кода
                     TextField(
                       controller: _codeController,
                       textAlign: TextAlign.center,
+                      textCapitalization: TextCapitalization.characters,
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.qr_code_scanner, color: Color(0xFFFF6B00)),
+                          onPressed: _scanQrCode,
+                          tooltip: 'Сканировать QR-код',
+                        ),
                         hintText: "Введите код приглашения от родителя",
                         hintStyle: GoogleFonts.nunito(color: Colors.black54, fontSize: 14),
                         filled: true,
@@ -238,7 +387,6 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Кнопка “Найти родителя”
                     GestureDetector(
                       onTap: _loading ? null : _searchParent,
                       child: Container(
@@ -327,7 +475,7 @@ class _ChildrenSearchScreenState extends State<ChildrenSearchScreen> {
                             ),
                             const SizedBox(height: 16),
                             GestureDetector(
-                              onTap: _loading ? null : _connectToParent,
+                              onTap: _loading ? null : _showConfirmationDialog,
                               child: Container(
                                 width: double.infinity,
                                 height: 50,

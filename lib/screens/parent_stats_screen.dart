@@ -38,7 +38,6 @@ class _ParentStatsScreenState extends State<ParentStatsScreen> {
   @override
   Widget build(BuildContext context) {
     final dashboard = ParentDashboardScreen(parentName: widget.parentName);
-    final parentKey = widget.parentName.replaceAll('.', '_');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FC),

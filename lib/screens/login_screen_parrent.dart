@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'parent_dashboard_screen.dart';
-import 'preim_screen.dart'; // ← импортируем экран преимуществ
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/auth_security_service.dart';
+import 'enhanced_parent_dashboard_screen.dart';
+import 'preim_screen.dart';
+import 'setup_security_screen.dart';
 
 class LoginScreenParrent extends StatefulWidget {
   const LoginScreenParrent({super.key});
@@ -77,17 +80,49 @@ class _LoginScreenParrentState extends State<LoginScreenParrent> {
       }
 
       if (match) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ParentDashboardScreen(parentName: parentName),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Неверный email или пароль')),
-        );
-      }
+        // Сохраняем данные пользователя в SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userRole', 'parent');
+        await prefs.setString('parentName', parentName);
+        await prefs.setString('parentKey', parentName.replaceAll('.', '_'));
+        await prefs.setString('parentEmail', email);
+        
+        // Проверяем, завершена ли настройка безопасности
+        final authService = AuthSecurityService();
+        final isSetupCompleted = await authService.isSetupCompleted;
+
+        if (!mounted) return;
+
+        if (!isSetupCompleted) {
+          // Если безопасность ещё не настроена, требуем Setup
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SetupSecurityScreen(
+                userRole: 'parent',
+                isFirstTime: true,
+              ),
+            ),
+          );
+        } else {
+          // Если безопасность уже настроена, отмечаем первый вход как завершенный и идём в dashboard
+          await prefs.setBool('firstLoginDone', true);
+          
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EnhancedParentDashboardScreen(
+                parentName: parentName,
+                parentKey: parentName.replaceAll('.', '_'),
+              ),
+            ),
+          );
+        }
+       } else {
+         ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(content: Text('Неверный email или пароль')),
+         );
+       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка входа: $e')),

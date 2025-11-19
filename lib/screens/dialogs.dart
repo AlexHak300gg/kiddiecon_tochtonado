@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 /// 🎯 Диалог создания новой цели
 class CreateGoalDialog extends StatefulWidget {
-  final void Function(String goalName, int target)? onCreated;
+  final void Function(String goalName, int target, DateTime? deadline)? onCreated;
 
   const CreateGoalDialog({super.key, this.onCreated});
 
@@ -14,15 +15,37 @@ class CreateGoalDialog extends StatefulWidget {
 class _CreateGoalDialogState extends State<CreateGoalDialog> {
   final _goalController = TextEditingController();
   final _targetController = TextEditingController();
+  DateTime? _selectedDeadline;
   bool _isSaving = false;
+
+  Future<void> _selectDeadline() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 30)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+      locale: const Locale('ru', 'RU'),
+    );
+    
+    if (picked != null) {
+      setState(() => _selectedDeadline = picked);
+    }
+  }
 
   Future<void> _saveGoal() async {
     final goalName = _goalController.text.trim();
     final targetText = _targetController.text.trim();
 
-    if (goalName.isEmpty || targetText.isEmpty) {
+    if (goalName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заполни все поля')),
+        const SnackBar(content: Text('Введите название цели')),
+      );
+      return;
+    }
+
+    if (targetText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите сумму цели')),
       );
       return;
     }
@@ -30,7 +53,7 @@ class _CreateGoalDialogState extends State<CreateGoalDialog> {
     final target = int.tryParse(targetText);
     if (target == null || target <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Введите корректную сумму цели')),
+        const SnackBar(content: Text('Сумма должна быть больше 0')),
       );
       return;
     }
@@ -39,10 +62,14 @@ class _CreateGoalDialogState extends State<CreateGoalDialog> {
 
     // 🔥 передаём данные родителю
     if (widget.onCreated != null) {
-      widget.onCreated!(goalName, target);
+      widget.onCreated!(goalName, target, _selectedDeadline);
     }
 
-    Navigator.pop(context);
+    Navigator.pop(context, {
+      'name': goalName,
+      'target': target,
+      'deadline': _selectedDeadline,
+    });
   }
 
   @override
@@ -89,6 +116,39 @@ class _CreateGoalDialogState extends State<CreateGoalDialog> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: _selectDeadline,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF6F8FB),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today, color: Colors.black54),
+                      const SizedBox(width: 12),
+                      Text(
+                        _selectedDeadline == null
+                            ? 'Срок достижения (необязательно)'
+                            : 'Срок: ${DateFormat('dd.MM.yyyy').format(_selectedDeadline!)}',
+                        style: GoogleFonts.nunito(
+                          color: _selectedDeadline == null ? Colors.black54 : Colors.black87,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (_selectedDeadline != null) ...[
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => setState(() => _selectedDeadline = null),
+                          child: const Icon(Icons.close, size: 18, color: Colors.red),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),

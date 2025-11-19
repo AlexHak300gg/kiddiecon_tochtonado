@@ -87,9 +87,15 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
   Future<void> _selectRole(String role) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userRole', role);
+    
+    if (!mounted) return;
+    
+    // После выбора роли, перенаправляем на PreimScreen для регистрации/входа
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => PreimScreen(role: role)),
+      MaterialPageRoute(
+        builder: (_) => PreimScreen(role: role),
+      ),
     );
   }
 

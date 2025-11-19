@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'parent_tasks_screen.dart';
 import 'parent_stats_screen.dart';
+import 'invite_dialog_screen.dart';
+import 'account_settings_screen.dart';
+import '../services/account_service.dart';
+import '../models/operation.dart';
 
 class ParentDashboardScreen extends StatelessWidget {
   final String parentName;
@@ -215,7 +219,7 @@ class ParentDashboardScreen extends StatelessWidget {
                 final goal = map['goal'] ?? 'Цель не установлена';
                 final balance = '₽${map['balance'] ?? 0}';
                 final progress = (map['progress'] ?? 0);
-                return _childCard(key, name, goal, balance, progress, Colors.blue);
+                return _childCard(key, name, goal, balance, progress, Colors.blue, context);
               }).toList();
 
               return SizedBox(height: 230, child: ListView(children: childrenList));
@@ -227,7 +231,9 @@ class ParentDashboardScreen extends StatelessWidget {
   }
 
   Widget _childCard(String childId, String name, String goal, String balance,
-      int progress, Color color) {
+      int progress, Color color, BuildContext context) {
+    final parentKey = parentName.replaceAll('.', '_');
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -261,9 +267,33 @@ class ParentDashboardScreen extends StatelessWidget {
               ],
             ),
           ),
-          Text(balance,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, color: Colors.green)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                balance,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.green),
+              ),
+              const SizedBox(height: 8),
+              IconButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AccountSettingsScreen(
+                        parentKey: parentKey,
+                        childId: childId,
+                        childName: name,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings, size: 20),
+                tooltip: 'Настройки счета',
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -401,23 +431,29 @@ class ParentDashboardScreen extends StatelessWidget {
                     return;
                   }
 
-                  await parentRef.set(parentBalance - amount);
+                  try {
+                    // Update parent balance
+                    await parentRef.set(parentBalance - amount);
 
-                  final childBalanceRef =
-                  db.child('parents_children/$parentKey/$selectedChildId/balance');
-                  final childSnap = await childBalanceRef.get();
-                  double childBalance = 0.0;
-                  if (childSnap.exists && childSnap.value != null) {
-                    final val = childSnap.value;
-                    if (val is num) childBalance = val.toDouble();
-                    else if (val is String)
-                      childBalance = double.tryParse(val) ?? 0.0;
-                  }
-                  await childBalanceRef.set(childBalance + amount);
+                    // Create account service and add transfer operation
+                    final accountService = AccountService(
+                      childId: selectedChildId!,
+                      parentKey: parentKey,
+                    );
 
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Перевод выполнен")));
-                  Navigator.pop(context);
+                    await accountService.addOperation(
+                      OperationType.transfer,
+                      amount,
+                      'Перевод от родителя',
+                    );
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Перевод выполнен")));
+                      Navigator.pop(context);
+                    } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Ошибка: $e")));
+                    }
                 },
                 child: const Text("Перевести"),
               ),
@@ -429,48 +465,11 @@ class ParentDashboardScreen extends StatelessWidget {
   }
 
   // 🔹 Пригласить ребёнка
-  void _showInviteDialog(BuildContext context) async {
-    final db = FirebaseDatabase.instance.ref();
-    final code =
-    (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
-    final parentKey = parentName.replaceAll('.', '_');
-
-    final codeRef = db.child('invites/$code');
-    await codeRef.set({
-      'parentKey': parentKey,
-      'parentName': parentName,
-      'createdAt': DateTime.now().toIso8601String(),
-      'expiresAt': DateTime.now().add(const Duration(minutes: 2)).toIso8601String(),
-    });
-    Future.delayed(const Duration(minutes: 2), () => codeRef.remove());
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Пригласить ребёнка"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.qr_code, size: 80, color: Color(0xFF6F6BF8)),
-            const SizedBox(height: 10),
-            const Text("Код для ребёнка (действует 2 минуты):"),
-            const SizedBox(height: 10),
-            Text(
-              code,
-              style: const TextStyle(
-                fontSize: 24,
-                color: Color(0xFF6F6BF8),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Закрыть"),
-          ),
-        ],
+  void _showInviteDialog(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InviteDialogScreen(parentName: parentName),
       ),
     );
   }
