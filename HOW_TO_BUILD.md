@@ -104,90 +104,6 @@ flutter run -d <device-id>
 
 ---
 
-## 🖥️ Установка на macOS (iOS и Android)
-
-### Шаг 1: Установка Flutter на macOS
-
-1. Скачайте Flutter SDK для macOS:
-   ```bash
-   # Используя Homebrew (рекомендуется)
-   brew install flutter
-   
-   # Или вручную с https://flutter.dev/docs/get-started/install/macos
-   ```
-
-2. Проверьте установку:
-   ```bash
-   flutter --version
-   flutter doctor
-   ```
-
-### Шаг 2: Установка зависимостей
-
-```bash
-# Установите Java (нужно для Android)
-brew install java11
-
-# Установите Xcode Command Line Tools (нужно для iOS)
-xcode-select --install
-
-# Установите Android Studio
-brew install --cask android-studio
-
-# Установите CocoaPods (нужно для iOS)
-sudo gem install cocoapods
-```
-
-### Шаг 3: Подготовка проекта
-
-1. Клонируйте репозиторий:
-   ```bash
-   git clone <ссылка-на-репозиторий>
-   cd untitled12
-   ```
-
-2. Получите зависимости:
-   ```bash
-   flutter pub get
-   cd ios
-   pod install --repo-update
-   cd ..
-   ```
-
-3. Проверьте окружение:
-   ```bash
-   flutter doctor -v
-   ```
-
-### Шаг 4: Подключение телефона (Android)
-
-Следуйте инструкциям из раздела Windows для подключения Android телефона.
-
-### Шаг 5: Подключение iPhone (iOS)
-
-1. Подключите iPhone через USB
-2. Откройте Xcode:
-   ```bash
-   open ios/Runner.xcworkspace
-   ```
-3. В Xcode выберите физический iPhone как target
-4. Нажмите кнопку "Run" или используйте Cmd+R
-
-### Шаг 6: Запуск приложения
-
-```bash
-# Для всех устройств
-flutter run
-
-# Для iOS
-flutter run -d <device-id>
-
-# Для Android
-flutter run -d <device-id>
-```
-
----
-
 ## 🐧 Установка на Linux
 
 ### Шаг 1: Установка Flutter
@@ -406,4 +322,4 @@ flutter doctor -v
 ---
 
 **Версия**: 1.0
-**Последнее обновление**: 2024
+**Последнее обновление**: 2025
