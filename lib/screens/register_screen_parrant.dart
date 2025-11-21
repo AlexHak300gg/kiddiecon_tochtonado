@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'parent_dashboard_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'setup_security_screen.dart';
 
 class RegisterScreenParrent extends StatefulWidget {
   const RegisterScreenParrent({super.key});
@@ -110,10 +111,24 @@ class _RegisterScreenParrentState extends State<RegisterScreenParrent> {
       await newParentRef.set(newParent);
 
       if (!mounted) return;
+      
+      // Сохраняем данные пользователя в SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userRole', 'parent');
+      await prefs.setString('parentName', name);
+      await prefs.setString('parentKey', newParentRef.key!);
+      await prefs.setString('parentEmail', email);
+      await prefs.setString('parentPhone', phone);
+      await prefs.setBool('firstLoginDone', true);
+      
+      // После успешной регистрации, перенаправляем на SetupSecurityScreen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => ParentDashboardScreen(parentName: name),
+          builder: (_) => SetupSecurityScreen(
+            userRole: 'parent',
+            isFirstTime: true,
+          ),
         ),
       );
     } catch (e) {

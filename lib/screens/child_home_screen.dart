@@ -2,7 +2,22 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/goal.dart';
+import '../models/account.dart';
+import '../models/operation.dart';
+import '../services/goal_service.dart';
+import '../services/account_service.dart';
+import '../services/achievement_service.dart';
+import '../widgets/celebration_animation.dart';
 import 'dialogs.dart';
+import 'goals_history_screen.dart';
+import 'child_tasks_screen.dart';
+import 'operation_history_screen.dart';
+import 'achievements_screen.dart';
+import 'setup_security_screen.dart';
+import 'role_selection_screen.dart';
 
 class ChildHomeScreen extends StatefulWidget {
   final String childId;
@@ -23,21 +38,34 @@ class ChildHomeScreen extends StatefulWidget {
 class _ChildHomeScreenState extends State<ChildHomeScreen> {
   final DatabaseReference _db = FirebaseDatabase.instance.ref();
   late DatabaseReference _childRef;
+  late GoalService _goalService;
+  late AccountService _accountService;
+  late AchievementService _achievementService;
   StreamSubscription<DatabaseEvent>? _sub;
+  StreamSubscription<List<Goal>>? _goalsSub;
 
   int _balance = 0;
-  String _goalName = 'Пока не установлена';
-  int _goalTarget = 0;
-  int _goalProgress = 0;
+  Goal? _activeGoal;
   List<Map<String, dynamic>> _history = [];
   bool _loading = true;
+  Goal? _lastCompletedGoal;
+  
+  // Account service related variables
+  Account? _account;
+  List<Operation> _operations = [];
+  double _todayInterest = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _childRef =
-        _db.child('parents_children/${widget.parentKey}/${widget.childId}');
+    _childRef = _db.child('parents_children/${widget.parentKey}/${widget.childId}');
+    _goalService = GoalService(parentKey: widget.parentKey, childId: widget.childId);
+    _accountService = AccountService(childId: widget.childId, parentKey: widget.parentKey);
+    _achievementService = AchievementService();
     _subscribeToChild();
+    _subscribeToGoals();
+    _subscribeToAccount();
+    _checkAndApplyMissedInterest();
   }
 
   void _subscribeToChild() {
@@ -47,9 +75,6 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
       if (val == null) {
         setState(() {
           _balance = 0;
-          _goalName = 'Пока не установлена';
-          _goalTarget = 0;
-          _goalProgress = 0;
           _history = [];
           _loading = false;
         });
@@ -75,9 +100,6 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
         }
         setState(() {
           _balance = _toInt(map['balance']);
-          _goalName = (map['goal'] ?? 'Пока не установлена').toString();
-          _goalTarget = _toInt(map['target']);
-          _goalProgress = _toInt(map['progress']);
           _history = hist;
           _loading = false;
         });
@@ -91,6 +113,69 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
     });
   }
 
+  void _subscribeToGoals() {
+    _goalsSub?.cancel();
+    _goalsSub = _goalService.goalsStream.listen((goals) {
+      final newActiveGoal = _goalService.activeGoal;
+      
+      // Проверяем, была ли только что завершена цель
+      if (_activeGoal != null && 
+          !_activeGoal!.isCompleted && 
+          newActiveGoal != null && 
+          newActiveGoal.isCompleted &&
+          newActiveGoal.id == _activeGoal!.id) {
+        _lastCompletedGoal = newActiveGoal;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _lastCompletedGoal != null) {
+            showCelebrationDialog(context, _lastCompletedGoal!.name);
+            _lastCompletedGoal = null;
+          }
+        });
+      }
+      
+      setState(() {
+        _activeGoal = newActiveGoal;
+      });
+    });
+  }
+
+  void _subscribeToAccount() {
+    _accountService.accountStream.listen((account) {
+      setState(() {
+        _account = account;
+        _balance = account.balance.round();
+      });
+    });
+
+    _accountService.operationsStream.listen((operations) {
+      setState(() {
+        _operations = operations;
+        _calculateTodayInterest();
+      });
+    });
+  }
+
+  void _calculateTodayInterest() {
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+
+    _todayInterest = _operations
+        .where((op) => 
+            op.type == OperationType.dailyInterest &&
+            op.timestamp.isAfter(todayStart) &&
+            op.timestamp.isBefore(todayEnd))
+        .fold(0.0, (sum, op) => sum + op.amount);
+  }
+
+  Future<void> _checkAndApplyMissedInterest() async {
+    try {
+      await _accountService.applyDailyInterest();
+    } catch (e) {
+      debugPrint('Error applying missed interest: $e');
+    }
+  }
+
   int _toInt(dynamic v) {
     if (v == null) return 0;
     if (v is int) return v;
@@ -99,79 +184,163 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
     return 0;
   }
 
-  Future<void> _setGoal(String name, int target) async {
-    await _childRef.update({
-      'goal': name,
-      'target': target,
-      'progress': 0,
-    });
-    await _childRef.child('history').push().set({
-      'action': 'Создание цели',
-      'amount': 0,
-      'note': name,
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+  Future<void> _createGoal() async {
+    try {
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (_) => const CreateGoalDialog(),
+      );
+
+      if (result != null && result['name'] != null && result['target'] != null) {
+        final name = result['name'] as String;
+        final target = result['target'] as int;
+        final deadline = result['deadline'] as DateTime?;
+
+        await _goalService.createGoal(
+          name: name,
+          target: target,
+          deadline: deadline,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Цель "$name" создана! 🎯')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _addBalance(int amount) async {
-    final newBal = _balance + amount;
-    await _childRef.update({'balance': newBal});
-    await _childRef.child('history').push().set({
-      'action': 'Пополнение',
-      'amount': amount,
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+    try {
+      await _accountService.addOperation(
+        OperationType.bonus,
+        amount.toDouble(),
+        'Пополнение баланса',
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Баланс пополнен на +$amount₽')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _depositToGoal() async {
-    if (_goalTarget <= 0) {
+    if (_activeGoal == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Сначала установи цель')),
+        const SnackBar(content: Text('Сначала создайте цель')),
       );
       return;
     }
+    
     final amountStr = await showDialog<String>(
       context: context,
       builder: (_) => DepositDialog(maxAmount: _balance),
     );
     if (amountStr == null) return;
+    
     final amount = int.tryParse(amountStr) ?? 0;
     if (amount <= 0) return;
+    
     if (amount > _balance) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Недостаточно средств')),
       );
       return;
     }
+    
     final newBalance = _balance - amount;
-    final newProgress = _goalProgress + amount;
-    await _childRef.update({'balance': newBalance, 'progress': newProgress});
+    await _childRef.update({'balance': newBalance});
+    
+    await _goalService.depositToGoal(_activeGoal!, amount);
+    
     await _childRef.child('history').push().set({
       'action': 'Вклад в цель',
       'amount': amount,
-      'note': _goalName,
+      'note': _activeGoal!.name,
       'timestamp': DateTime.now().toIso8601String(),
     });
+  }
 
-    if (_goalTarget > 0 && newProgress >= _goalTarget) {
-      await _childRef.child('history').push().set({
-        'action': 'Цель достигнута',
-        'amount': 0,
-        'note': _goalName,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    }
+  Future<void> _logout() async {
+   final confirmed = await showDialog<bool>(
+     context: context,
+     builder: (context) => AlertDialog(
+       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+       title: Text(
+         'Выход',
+         style: GoogleFonts.nunito(fontWeight: FontWeight.bold),
+       ),
+       content: Text(
+         'Вы уверены, что хотите выйти?',
+         style: GoogleFonts.nunito(),
+       ),
+       actions: [
+         TextButton(
+           onPressed: () => Navigator.pop(context, false),
+           child: const Text('Отмена'),
+         ),
+         ElevatedButton(
+           onPressed: () => Navigator.pop(context, true),
+           style: ElevatedButton.styleFrom(
+             backgroundColor: Colors.red,
+           ),
+           child: const Text('Выход'),
+         ),
+       ],
+     ),
+   );
+
+   if (confirmed == true && mounted) {
+     final prefs = await SharedPreferences.getInstance();
+     await prefs.remove('userRole');
+     await prefs.remove('firstLoginDone');
+
+     if (!mounted) return;
+     Navigator.pushReplacement(
+       context,
+       MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+     );
+   }
+  }
+
+  Future<void> _changePIN() async {
+   Navigator.push(
+     context,
+     MaterialPageRoute(
+       builder: (_) => SetupSecurityScreen(
+         userRole: 'child',
+         isFirstTime: false,
+       ),
+     ),
+   );
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
-    super.dispose();
+   _sub?.cancel();
+   _goalsSub?.cancel();
+   _goalService.dispose();
+   super.dispose();
   }
 
   double get _progressPercent {
-    if (_goalTarget == 0) return 0.0;
-    return (_goalProgress / _goalTarget).clamp(0.0, 1.0);
+    if (_activeGoal == null || _activeGoal!.target == 0) return 0.0;
+    return (_activeGoal!.progress / _activeGoal!.target).clamp(0.0, 1.0);
   }
 
   // ---------- UI ----------
@@ -242,6 +411,17 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                if (_todayInterest > 0) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Сегодня начислено: +${_todayInterest.toStringAsFixed(2)}₽',
+                    style: GoogleFonts.nunito(
+                      color: Colors.green.shade200,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -291,11 +471,78 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
   }
 
   Widget _buildGoalCard() {
-    final percent = (_progressPercent * 100).toInt();
+    if (_activeGoal == null) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.flag_outlined,
+              size: 60,
+              color: Colors.grey.shade300,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Нет активной цели',
+              style: GoogleFonts.nunito(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Создайте цель, чтобы начать копить',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.nunito(
+                fontSize: 14,
+                color: Colors.black38,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _createGoal,
+              icon: const Icon(Icons.add),
+              label: const Text('Создать цель'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final goal = _activeGoal!;
+    final percent = goal.percent;
+    final dateFormat = DateFormat('dd.MM.yyyy');
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: goal.isCompleted
+            ? const LinearGradient(
+                colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
+        color: goal.isCompleted ? null : Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -305,131 +552,174 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
         children: [
-          // 🎯 Увеличенный круг прогресса
-          SizedBox(
-            width: 140,
-            height: 140,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: _progressPercent,
-                  strokeWidth: 12,
-                  backgroundColor: Colors.grey.shade200,
-                  color: Colors.orange,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // 🎯 Увеличенный круг прогресса
+              SizedBox(
+                width: 140,
+                height: 140,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: _progressPercent,
+                      strokeWidth: 12,
+                      backgroundColor: Colors.grey.shade200,
+                      color: goal.isCompleted ? Colors.green : Colors.orange,
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$percent%',
+                          style: GoogleFonts.nunito(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        Text(
+                          goal.isCompleted ? 'готово!' : 'цель',
+                          style: GoogleFonts.nunito(
+                            fontSize: 13,
+                            color: goal.isCompleted ? Colors.green : Colors.black54,
+                            fontWeight: goal.isCompleted ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
                 ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+              const SizedBox(width: 18),
+
+              // 🧾 Информация о цели
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$percent%',
+                      goal.name,
                       style: GoogleFonts.nunito(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
                         color: Colors.black87,
                       ),
                     ),
+                    const SizedBox(height: 8),
                     Text(
-                      'цель',
+                      '${goal.progress}₽ из ${goal.target}₽',
                       style: GoogleFonts.nunito(
-                        fontSize: 13,
                         color: Colors.black54,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ],
-                )
-              ],
-            ),
-          ),
-          const SizedBox(width: 18),
-
-          // 🧾 Информация о цели
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _goalName,
-                  style: GoogleFonts.nunito(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Цель: ${_goalTarget}₽',
-                  style: GoogleFonts.nunito(color: Colors.black54),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Накоплено: ${_goalProgress}₽',
-                  style: GoogleFonts.nunito(
-                    color: Colors.green,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // 🔘 Кнопки
-                Row(
-                  children: [
-                    ElevatedButton(
-                      onPressed: () async {
-                        await showDialog(
-                          context: context,
-                          builder: (_) => CreateGoalDialog(
-                            onCreated: (name, target) => _setGoal(name, target),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF42A5F5),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    const SizedBox(height: 6),
+                    if (!goal.isCompleted)
+                      Text(
+                        'Осталось: ${goal.remaining}₽',
+                        style: GoogleFonts.nunito(
+                          color: Colors.orange,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      child: const Text(
-                        'Изменить',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                    if (goal.deadline != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_today, size: 14, color: Colors.black54),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Срок: ${dateFormat.format(goal.deadline!)}',
+                            style: GoogleFonts.nunito(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 6),
-
-                    // ⚠️ Меньшая кнопка "Отказаться"
-                    OutlinedButton(
-                      onPressed: () async {
-                        await _childRef.update({
-                          'goal': 'Пока не установлена',
-                          'target': 0,
-                          'progress': 0,
-                        });
-                        await _childRef.child('history').push().set({
-                          'action': 'Отказ от цели',
-                          'amount': 0,
-                          'timestamp': DateTime.now().toIso8601String(),
-                        });
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                        side: const BorderSide(color: Colors.redAccent, width: 1),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 5),
-                        textStyle: const TextStyle(fontSize: 12),
-                        minimumSize: const Size(0, 25),
-                      ),
-                      child: const Text('Отказаться'),
-                    ),
+                    ],
                   ],
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 🔘 Кнопки
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (goal.isCompleted) ...[
+                ElevatedButton.icon(
+                  onPressed: _createGoal,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Новая цель'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                ElevatedButton.icon(
+                  onPressed: () => _depositToGoal(),
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: const Text('Внести'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF42A5F5),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Отказаться от цели?'),
+                        content: Text('Вы уверены, что хотите отказаться от цели "${goal.name}"?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Отмена'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Отказаться', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true) {
+                      await _goalService.abandonGoal(goal);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Цель отменена')),
+                        );
+                      }
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: const BorderSide(color: Colors.redAccent, width: 1),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  child: const Text('Отказаться'),
+                ),
               ],
-            ),
+            ],
           ),
         ],
       ),
@@ -534,6 +824,49 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F6FF),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'change_pin') {
+                _changePIN();
+              } else if (value == 'logout') {
+                _logout();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'change_pin',
+                child: Row(
+                  children: [
+                    const Icon(Icons.lock, color: Colors.blue),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Изменить PIN',
+                      style: GoogleFonts.nunito(),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    const Icon(Icons.logout, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Выход',
+                      style: GoogleFonts.nunito(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -554,7 +887,17 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
                         style: GoogleFonts.nunito(
                             fontSize: 18, fontWeight: FontWeight.w800)),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GoalsHistoryScreen(
+                              childId: widget.childId,
+                              childName: widget.childName,
+                            ),
+                          ),
+                        );
+                      },
                       child: const Text('История'),
                     ),
                   ],
@@ -562,9 +905,138 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
                 const SizedBox(height: 8),
                 _buildGoalCard(),
                 const SizedBox(height: 18),
-                Text('Активные задания',
-                    style: GoogleFonts.nunito(
-                        fontSize: 18, fontWeight: FontWeight.w800)),
+                
+                // Achievements section
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Достижения',
+                        style: GoogleFonts.nunito(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => AchievementsScreen(
+                              childId: widget.childId,
+                              childName: widget.childName,
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('Все'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 120,
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _getAchievementsPreview(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      
+                      final achievements = snapshot.data ?? [];
+                      if (achievements.isEmpty) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Начните выполнять задания, чтобы получить достижения!',
+                              style: GoogleFonts.nunito(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      }
+                      
+                      return ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: achievements.length,
+                        itemBuilder: (context, index) {
+                          final achievement = achievements[index];
+                          return Container(
+                            width: 100,
+                            margin: const EdgeInsets.only(right: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: achievement['isUnlocked'] 
+                                    ? Colors.orange.withOpacity(0.3)
+                                    : Colors.grey.shade200,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  achievement['icon'],
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    color: achievement['isUnlocked'] 
+                                        ? null 
+                                        : Colors.grey[400],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  achievement['title'],
+                                  style: GoogleFonts.nunito(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: achievement['isUnlocked'] 
+                                        ? Colors.black87 
+                                        : Colors.grey[500],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Активные задания',
+                        style: GoogleFonts.nunito(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChildTasksScreen(
+                              childName: widget.childName,
+                              childId: widget.childId,
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('Все задания'),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -579,9 +1051,30 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                Text('История операций',
-                    style: GoogleFonts.nunito(
-                        fontSize: 18, fontWeight: FontWeight.w800)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('История операций',
+                        style: GoogleFonts.nunito(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => OperationHistoryScreen(
+                              parentKey: widget.parentKey,
+                              childrenData: [
+                                {'id': widget.childId, 'name': widget.childName}
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('Подробнее'),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 _buildHistory(),
                 const SizedBox(height: 40),
@@ -591,5 +1084,19 @@ class _ChildHomeScreenState extends State<ChildHomeScreen> {
         ),
       ),
     );
+  }
+
+  Future<List<Map<String, dynamic>>> _getAchievementsPreview() async {
+    try {
+      final achievements = await _achievementService.getAchievements(widget.childId);
+      return achievements.take(4).map((a) => {
+        'id': a.id,
+        'title': a.title,
+        'icon': a.icon,
+        'isUnlocked': a.isUnlocked,
+      }).toList();
+    } catch (e) {
+      return [];
+    }
   }
 }
