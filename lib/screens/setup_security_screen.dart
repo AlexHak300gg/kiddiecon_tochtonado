@@ -25,13 +25,13 @@ class SetupSecurityScreen extends StatefulWidget {
 class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
   final AuthSecurityService _authService = AuthSecurityService();
   final PageController _pageController = PageController();
-
+  
   int _currentStep = 0;
   bool _enableBiometric = false;
   bool _enablePattern = false;
   String _pinCode = '';
   List<int> _pattern = [];
-
+  
   bool _biometricAvailable = false;
   bool _isLoadingBiometric = true;
 
@@ -49,12 +49,10 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
 
   Future<void> _checkBiometricAvailability() async {
     final available = await _authService.isBiometricAvailable();
-    if (mounted) {
-      setState(() {
-        _biometricAvailable = available;
-        _isLoadingBiometric = false;
-      });
-    }
+    setState(() {
+      _biometricAvailable = available;
+      _isLoadingBiometric = false;
+    });
   }
 
   @override
@@ -121,7 +119,7 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
           Row(
             children: List.generate(
               _getTotalSteps(),
-                  (index) => Expanded(
+              (index) => Expanded(
                 child: Container(
                   height: 4,
                   margin: EdgeInsets.only(
@@ -165,7 +163,7 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
             ),
           ),
           const SizedBox(height: 32),
-
+          
           // PIN (always enabled)
           _buildMethodCard(
             title: 'PIN-код',
@@ -174,24 +172,24 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
             isEnabled: true,
             isRequired: true,
           ),
-
+          
           const SizedBox(height: 16),
-
+          
           // Biometric
           if (!_isLoadingBiometric)
             _buildMethodCard(
               title: 'Биометрия',
-              subtitle: _biometricAvailable
-                  ? 'Отпечаток пальца или Face ID'
+              subtitle: _biometricAvailable 
+                  ? 'Отпечаток пальца или Face ID' 
                   : 'Недоступна на этом устройстве',
               icon: Icons.fingerprint,
               isEnabled: _biometricAvailable && _enableBiometric,
               isRequired: false,
-              onTap: _biometricAvailable
+              onTap: _biometricAvailable 
                   ? () => setState(() => _enableBiometric = !_enableBiometric)
                   : null,
             ),
-
+          
           if (_isLoadingBiometric)
             Container(
               height: 80,
@@ -210,15 +208,15 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
                 child: CircularProgressIndicator(),
               ),
             ),
-
+          
           if (!_isLoadingBiometric) ...[
             const SizedBox(height: 16),
-
+            
             // Pattern
             _buildMethodCard(
               title: 'Графический ключ',
               subtitle: 'Рисуйте паттерн для входа',
-              icon: Icons.lock, // Icons.pattern не существует — заменил на lock
+              icon: Icons.pattern,
               isEnabled: _enablePattern,
               isRequired: false,
               onTap: () => setState(() => _enablePattern = !_enablePattern),
@@ -245,8 +243,8 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isEnabled
-                ? Theme.of(context).primaryColor
+            color: isEnabled 
+                ? Theme.of(context).primaryColor 
                 : Colors.grey[300]!,
             width: 2,
           ),
@@ -263,15 +261,15 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isEnabled
+                color: isEnabled 
                     ? Theme.of(context).primaryColor.withOpacity(0.1)
                     : Colors.grey[100],
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
-                color: isEnabled
-                    ? Theme.of(context).primaryColor
+                color: isEnabled 
+                    ? Theme.of(context).primaryColor 
                     : Colors.grey[600],
                 size: 24,
               ),
@@ -288,8 +286,8 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
                         style: GoogleFonts.nunito(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: isEnabled
-                              ? Colors.black87
+                          color: isEnabled 
+                              ? Colors.black87 
                               : Colors.grey[600],
                         ),
                       ),
@@ -350,18 +348,6 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
             length: 6,
             obscureText: true,
             onCompleted: (pin) {
-              // Проверяем корректность PIN (4-6 цифр)
-              if (pin.length < 4 || pin.length > 6) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('PIN должен содержать от 4 до 6 цифр'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-                return;
-              }
               setState(() {
                 _pinCode = pin;
               });
@@ -385,17 +371,6 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
             confirmTitle: 'Подтвердите графический ключ',
             confirmSubtitle: 'Нарисуйте тот же паттерн еще раз',
             onCompleted: (pattern) {
-              if (pattern.length < 4) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Паттерн должен содержать минимум 4 точки'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-                return;
-              }
               setState(() {
                 _pattern = pattern;
               });
@@ -566,30 +541,16 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
   }
 
   bool _canGoNext() {
-    final int pinStepIndex = 1;
-    final int patternStepIndex = _enablePattern ? 2 : -1;
-    final int completionIndex = _getTotalSteps() - 1;
-
-    if (_currentStep == 0) {
-      // На шаге выбора методов — всегда можно идти далее (PIN обязателен)
-      return true;
+    switch (_currentStep) {
+      case 0: // Methods selection
+        return true; // PIN is always required
+      case 1: // PIN setup
+        return _pinCode.isNotEmpty;
+      case 2: // Pattern setup (if enabled)
+        return _pattern.isNotEmpty;
+      default:
+        return false;
     }
-
-    if (_currentStep == pinStepIndex) {
-      // PIN должен быть 4-6 цифр
-      return _pinCode.isNotEmpty && _pinCode.length >= 4 && _pinCode.length <= 6;
-    }
-
-    if (_enablePattern && _currentStep == patternStepIndex) {
-      return _pattern.isNotEmpty && _pattern.length >= 4;
-    }
-
-    if (_currentStep == completionIndex) {
-      // на шаге завершения — кнопка "Готово" активна
-      return true;
-    }
-
-    return false;
   }
 
   void _nextStep() async {
@@ -623,32 +584,32 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
     try {
       // Setup PIN
       await _authService.setupPinCode(_pinCode);
-
+      
       // Setup biometric if enabled
       if (_enableBiometric) {
         await _authService.enableBiometric(true);
       }
-
+      
       // Setup pattern if enabled
       if (_enablePattern) {
         final patternString = _pattern.join(',');
         await _authService.setupPatternLock(patternString);
       }
-
+      
       // Mark setup as completed
       await _authService.completeSetup();
-
+      
       // Если это первая настройка после регистрации/входа, отметим это
       if (widget.isFirstTime) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('firstLoginDone', true);
-
+        
         // Для первого раза переходим сразу на главный экран, минуя повторную аутентификацию
         if (mounted) {
           if (widget.userRole == 'parent') {
             final parentName = prefs.getString('parentName') ?? '';
             final parentKey = prefs.getString('parentKey') ?? '';
-
+            
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(
                 builder: (_) => EnhancedParentDashboardScreen(
@@ -656,13 +617,13 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
                   parentKey: parentKey,
                 ),
               ),
-                  (route) => false,
+              (route) => false,
             );
           } else {
             final childId = prefs.getString('childId') ?? '';
             final parentKey = prefs.getString('parentKey') ?? '';
             final childName = prefs.getString('childName') ?? '';
-
+            
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(
                 builder: (_) => ChildHomeScreen(
@@ -671,7 +632,7 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
                   childName: childName,
                 ),
               ),
-                  (route) => false,
+              (route) => false,
             );
           }
         }
@@ -681,7 +642,7 @@ class _SetupSecurityScreenState extends State<SetupSecurityScreen> {
         if (mounted) {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => AppSecurityWrapper()),
-                (route) => false,
+            (route) => false,
           );
         }
       }

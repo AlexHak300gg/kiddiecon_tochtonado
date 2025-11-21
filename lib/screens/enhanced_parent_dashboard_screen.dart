@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/analytics_service.dart';
 import '../screens/operation_history_screen.dart';
 import 'analytics_screen.dart';
+import 'invite_dialog_screen.dart';
 import 'setup_security_screen.dart';
 import 'role_selection_screen.dart';
 
@@ -46,11 +47,13 @@ class _EnhancedParentDashboardScreenState extends State<EnhancedParentDashboardS
   Future<void> _loadChildrenData() async {
    try {
      final childrenData = await _analyticsService.getChildrenDashboardData(widget.parentKey);
+     if (!mounted) return;
      setState(() {
        _childrenData = childrenData;
        _isLoading = false;
      });
    } catch (e) {
+     if (!mounted) return;
      setState(() {
        _isLoading = false;
      });
@@ -109,6 +112,17 @@ class _EnhancedParentDashboardScreenState extends State<EnhancedParentDashboardS
        ),
      ),
    );
+  }
+
+  void _addChild() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InviteDialogScreen(parentName: widget.parentName),
+      ),
+    ).then((_) {
+      _loadChildrenData();
+    });
   }
 
   void _showAddBonusDialog(Map<String, dynamic> childData) {
@@ -557,6 +571,28 @@ class _EnhancedParentDashboardScreenState extends State<EnhancedParentDashboardS
     );
   }
 
+  Widget _buildAddChildButton({EdgeInsetsGeometry? padding, double fontSize = 14}) {
+    return ElevatedButton.icon(
+      onPressed: _addChild,
+      icon: const Icon(Icons.person_add_alt_1, size: 18),
+      label: Text(
+        'Добавить ребенка',
+        style: GoogleFonts.nunito(
+          fontWeight: FontWeight.w600,
+          fontSize: fontSize,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.orange,
+        foregroundColor: Colors.white,
+        padding: padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -722,6 +758,7 @@ class _EnhancedParentDashboardScreenState extends State<EnhancedParentDashboardS
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   Icons.child_care,
@@ -737,6 +774,11 @@ class _EnhancedParentDashboardScreenState extends State<EnhancedParentDashboardS
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
+                                const SizedBox(height: 24),
+                                _buildAddChildButton(
+                                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                  fontSize: 16,
+                                ),
                               ],
                             ),
                           )
@@ -744,13 +786,19 @@ class _EnhancedParentDashboardScreenState extends State<EnhancedParentDashboardS
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Padding(
-                                padding: const EdgeInsets.only(left: 16, bottom: 16),
-                                child: Text(
-                                  'Ваши дети',
-                                  style: GoogleFonts.nunito(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Ваши дети',
+                                      style: GoogleFonts.nunito(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    _buildAddChildButton(),
+                                  ],
                                 ),
                               ),
                               SizedBox(
